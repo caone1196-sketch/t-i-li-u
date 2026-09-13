@@ -1,0 +1,210 @@
+{
+  "last_node_id": 20,
+  "last_link_id": 20,
+  "nodes": [
+    {
+      "id": 15,
+      "type": "Note",
+      "pos": [40, 40],
+      "size": [900, 250],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "properties": {"text": ""},
+      "widgets_values": ["🩹 INPAINTING - SỬA VÙNG LỖI / TẨY ĐỒ LẠ (giữ nguyên phần còn lại)\n\nCÁCH DÙNG - 4 BƯỚC:\n\n① Ô 'NẠP ẢNH GỐC': bấm 'choose file to upload' → chọn ảnh cần sửa từ máy tính\n   (dùng chính ảnh vừa tạo, hoặc bất kỳ ảnh nào)\n\n② VẼ VÙNG CẦN SỬA: chuột phải vào ảnh trong node → 'Open in MaskEditor'\n   → dùng cọ BÔI ĐEN vùng muốn vẽ lại (đồ lạ, tay lỗi, mặt hỏng...)\n   → bôi RỘNG hơn vùng lỗi một chút → bấm Save\n\n③ Ô 'MÔ TẢ VÙNG SỬA': gõ thứ muốn xuất hiện TẠI VÙNG ĐÃ BÔI\n   • Tẩy đồ lạ: gõ thứ nền phía sau, vd: 'simple background, wall'\n   • Sửa tay: 'perfect hand, five fingers'\n   • Đổi chi tiết: 'red ribbon' thay nơ xanh...\n\n④ Bấm QUEUE → chỉ vùng bôi đen được vẽ lại, phần còn lại giữ nguyên 100%"],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 16,
+      "type": "Note",
+      "pos": [980, 40],
+      "size": [640, 250],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "properties": {"text": ""},
+      "widgets_values": ["⚙️ THÔNG SỐ QUAN TRỌNG\n\n• denoise (MÁY VẼ LẠI): sức mạnh vẽ lại vùng bôi\n  - 0.4 = sửa nhẹ, giữ dáng cũ (sửa màu, làm nét)\n  - 0.6 = vẽ lại hẳn nhưng hợp cảnh ← ĐANG CHỌN\n  - 0.8-1.0 = vẽ mới hoàn toàn tại vùng bôi (tẩy đồ vật)\n\n• grow_mask_by (MỞ RỘNG VÙNG BÔI): 16 = viền chuyển\n  mượt giữa vùng vẽ lại và vùng giữ nguyên.\n  Nếu thấy viền lộ rõ → tăng lên 24-32\n\n💡 MẸO:\n• Tẩy đồ vật: bôi phủ kín cả bóng của nó, denoise 0.8+\n• Sửa mặt/tay: bôi gọn vùng đó, denoise 0.5-0.6\n• Ảnh nạp vào nên là ảnh do chính Animagine tạo\n  (cùng model = vá liền mạch nhất)"],
+      "color": "#223",
+      "bgcolor": "#335"
+    },
+    {
+      "id": 11,
+      "type": "LoadImage",
+      "pos": [40, 350],
+      "size": [340, 400],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {"name": "IMAGE", "type": "IMAGE", "links": [11], "slot_index": 0},
+        {"name": "MASK", "type": "MASK", "links": [12], "slot_index": 1}
+      ],
+      "title": "🖼️ NẠP ẢNH GỐC (upload + chuột phải → MaskEditor)",
+      "properties": {"Node name for S&R": "LoadImage"},
+      "widgets_values": ["example.png", "image"],
+      "color": "#233",
+      "bgcolor": "#355"
+    },
+    {
+      "id": 4,
+      "type": "CheckpointLoaderSimple",
+      "pos": [40, 810],
+      "size": [340, 100],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "outputs": [
+        {"name": "MODEL", "type": "MODEL", "links": [1], "slot_index": 0},
+        {"name": "CLIP", "type": "CLIP", "links": [3, 5], "slot_index": 1},
+        {"name": "VAE", "type": "VAE", "links": [13, 8], "slot_index": 2}
+      ],
+      "title": "📦 NẠP MODEL",
+      "properties": {"Node name for S&R": "CheckpointLoaderSimple"},
+      "widgets_values": ["animagine-xl-4.0-opt.safetensors"],
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 6,
+      "type": "CLIPTextEncode",
+      "pos": [430, 350],
+      "size": [420, 170],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {"name": "clip", "type": "CLIP", "link": 3}
+      ],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [4], "slot_index": 0}
+      ],
+      "title": "✅ MÔ TẢ VÙNG SỬA - muốn gì tại vùng bôi đen",
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["simple background, masterpiece, high score, great score, absurdres"],
+      "color": "#232",
+      "bgcolor": "#353"
+    },
+    {
+      "id": 7,
+      "type": "CLIPTextEncode",
+      "pos": [430, 570],
+      "size": [420, 160],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {"name": "clip", "type": "CLIP", "link": 5}
+      ],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [6], "slot_index": 0}
+      ],
+      "title": "🚫 LOẠI TRỪ",
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["lowres, bad anatomy, bad hands, text, error, extra digits, cropped, worst quality, low quality, low score, bad score, signature, watermark, blurry"],
+      "color": "#322",
+      "bgcolor": "#533"
+    },
+    {
+      "id": 12,
+      "type": "VAEEncodeForInpaint",
+      "pos": [430, 780],
+      "size": [330, 120],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {"name": "pixels", "type": "IMAGE", "link": 11},
+        {"name": "vae", "type": "VAE", "link": 13},
+        {"name": "mask", "type": "MASK", "link": 12}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [14], "slot_index": 0}
+      ],
+      "title": "🎭 MÃ HÓA VÙNG BÔI (grow_mask_by = mở rộng viền)",
+      "properties": {"Node name for S&R": "VAEEncodeForInpaint"},
+      "widgets_values": [16],
+      "color": "#233",
+      "bgcolor": "#355"
+    },
+    {
+      "id": 3,
+      "type": "KSampler",
+      "pos": [900, 350],
+      "size": [320, 280],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {"name": "model", "type": "MODEL", "link": 1},
+        {"name": "positive", "type": "CONDITIONING", "link": 4},
+        {"name": "negative", "type": "CONDITIONING", "link": 6},
+        {"name": "latent_image", "type": "LATENT", "link": 14}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [7], "slot_index": 0}
+      ],
+      "title": "🖌️ MÁY VẼ LẠI (denoise = sức mạnh vẽ lại)",
+      "properties": {"Node name for S&R": "KSampler"},
+      "widgets_values": [156680208700286, "randomize", 24, 6, "euler_ancestral", "normal", 0.6],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 8,
+      "type": "VAEDecode",
+      "pos": [1270, 350],
+      "size": [220, 60],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {"name": "samples", "type": "LATENT", "link": 7},
+        {"name": "vae", "type": "VAE", "link": 8}
+      ],
+      "outputs": [
+        {"name": "IMAGE", "type": "IMAGE", "links": [9], "slot_index": 0}
+      ],
+      "title": "🔄 GIẢI MÃ ẢNH",
+      "properties": {"Node name for S&R": "VAEDecode"}
+    },
+    {
+      "id": 9,
+      "type": "SaveImage",
+      "pos": [1540, 350],
+      "size": [380, 440],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {"name": "images", "type": "IMAGE", "link": 9}
+      ],
+      "title": "🖼️ ẢNH ĐÃ SỬA (chuột phải → Save image)",
+      "properties": {},
+      "widgets_values": ["DaSua"],
+      "color": "#223",
+      "bgcolor": "#335"
+    }
+  ],
+  "links": [
+    [1, 4, 0, 3, 0, "MODEL"],
+    [3, 4, 1, 6, 0, "CLIP"],
+    [4, 6, 0, 3, 1, "CONDITIONING"],
+    [5, 4, 1, 7, 0, "CLIP"],
+    [6, 7, 0, 3, 2, "CONDITIONING"],
+    [7, 3, 0, 8, 0, "LATENT"],
+    [8, 4, 2, 8, 1, "VAE"],
+    [9, 8, 0, 9, 0, "IMAGE"],
+    [11, 11, 0, 12, 0, "IMAGE"],
+    [12, 11, 1, 12, 2, "MASK"],
+    [13, 4, 2, 12, 1, "VAE"],
+    [14, 12, 0, 3, 3, "LATENT"]
+  ],
+  "groups": [
+    {"title": "① ẢNH GỐC + VÙNG BÔI + MÔ TẢ", "bounding": [20, 310, 850, 620], "color": "#3f789e", "font_size": 24},
+    {"title": "② VẼ LẠI VÙNG BÔI → ẢNH ĐÃ SỬA", "bounding": [880, 310, 1060, 500], "color": "#b06634", "font_size": 24}
+  ],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}
