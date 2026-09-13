@@ -1,0 +1,269 @@
+{
+  "last_node_id": 16,
+  "last_link_id": 18,
+  "nodes": [
+    {
+      "id": 10,
+      "type": "Note",
+      "pos": [40, 40],
+      "size": [880, 210],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "properties": {"text": ""},
+      "widgets_values": ["🔍 HIRES-FIX LÀ GÌ?\n\nVẽ 2 lượt:\n• LƯỢT 1 (MÁY VẼ NHÁP): vẽ ảnh 832x1216 như bình thường\n• PHÓNG TO ẢNH NHÁP lên 1.5 lần (1248x1824)\n• LƯỢT 2 (MÁY VẼ TINH): vẽ đè lên bản phóng to với denoise 0.5 → thêm chi tiết nét căng\n\nKết quả: ảnh to hơn + chi tiết mịn hơn hẳn so với vẽ 1 lượt.\n\n⏱️ THỜI GIAN trên GPU T4: khoảng 1.5 - 2.5 phút/ảnh (gấp đôi bình thường - đáng giá!)\n💡 Ô 'XEM BẢN NHÁP' cho xem ảnh lượt 1 để so sánh trước/sau."],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 11,
+      "type": "Note",
+      "pos": [960, 40],
+      "size": [700, 210],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "properties": {"text": ""},
+      "widgets_values": ["⚙️ THÔNG SỐ QUAN TRỌNG NHẤT: denoise của MÁY VẼ TINH\n\n• 0.4 = giữ sát bản nháp, chỉ làm nét (an toàn)\n• 0.5 = cân bằng đẹp ← ĐANG CHỌN\n• 0.6 = thêm nhiều chi tiết mới (có thể lệch bản nháp)\n• trên 0.7 = ảnh biến dạng so với nháp - không nên\n\n📐 Muốn phóng to hơn: ô PHÓNG TO ẢNH NHÁP\n• 1248 x 1824 = gấp 1.5 lần ← ĐANG CHỌN (hợp T4)\n• 1664 x 2432 = gấp 2 lần (chậm hơn nhiều, dễ hết VRAM)\n\n🚫 Nếu báo lỗi hết bộ nhớ (OOM): giảm về 1080 x 1580"],
+      "color": "#223",
+      "bgcolor": "#335"
+    },
+    {
+      "id": 4,
+      "type": "CheckpointLoaderSimple",
+      "pos": [40, 320],
+      "size": [340, 100],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {"name": "MODEL", "type": "MODEL", "links": [1, 10], "slot_index": 0},
+        {"name": "CLIP", "type": "CLIP", "links": [3, 5], "slot_index": 1},
+        {"name": "VAE", "type": "VAE", "links": [8, 17], "slot_index": 2}
+      ],
+      "title": "📦 NẠP MODEL",
+      "properties": {"Node name for S&R": "CheckpointLoaderSimple"},
+      "widgets_values": ["animagine-xl-4.0-opt.safetensors"],
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 6,
+      "type": "CLIPTextEncode",
+      "pos": [430, 320],
+      "size": [420, 180],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {"name": "clip", "type": "CLIP", "link": 3}
+      ],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [4, 11], "slot_index": 0}
+      ],
+      "title": "✅ MÔ TẢ ẢNH - muốn gì gõ vào đây (tiếng Anh)",
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["1girl, long hair, school uniform, cherry blossoms, upper body, smile, masterpiece, high score, great score, absurdres"],
+      "color": "#232",
+      "bgcolor": "#353"
+    },
+    {
+      "id": 7,
+      "type": "CLIPTextEncode",
+      "pos": [430, 550],
+      "size": [420, 160],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {"name": "clip", "type": "CLIP", "link": 5}
+      ],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [6, 12], "slot_index": 0}
+      ],
+      "title": "🚫 LOẠI TRỪ - thứ KHÔNG muốn",
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, low quality, low score, bad score, average score, signature, watermark, username, blurry"],
+      "color": "#322",
+      "bgcolor": "#533"
+    },
+    {
+      "id": 5,
+      "type": "EmptyLatentImage",
+      "pos": [430, 760],
+      "size": [320, 110],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [2], "slot_index": 0}
+      ],
+      "title": "📐 KHUNG ẢNH NHÁP (832x1216 - đừng tăng ở đây)",
+      "properties": {"Node name for S&R": "EmptyLatentImage"},
+      "widgets_values": [832, 1216, 1],
+      "color": "#233",
+      "bgcolor": "#355"
+    },
+    {
+      "id": 3,
+      "type": "KSampler",
+      "pos": [900, 320],
+      "size": [320, 280],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {"name": "model", "type": "MODEL", "link": 1},
+        {"name": "positive", "type": "CONDITIONING", "link": 4},
+        {"name": "negative", "type": "CONDITIONING", "link": 6},
+        {"name": "latent_image", "type": "LATENT", "link": 2}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [7, 16], "slot_index": 0}
+      ],
+      "title": "🖌️ MÁY VẼ NHÁP (lượt 1)",
+      "properties": {"Node name for S&R": "KSampler"},
+      "widgets_values": [156680208700286, "randomize", 26, 6, "euler_ancestral", "normal", 1],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 13,
+      "type": "LatentUpscale",
+      "pos": [900, 660],
+      "size": [320, 130],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {"name": "samples", "type": "LATENT", "link": 7}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [14], "slot_index": 0}
+      ],
+      "title": "🔍 PHÓNG TO ẢNH NHÁP (1.5x)",
+      "properties": {"Node name for S&R": "LatentUpscale"},
+      "widgets_values": ["nearest-exact", 1248, 1824, "disabled"],
+      "color": "#233",
+      "bgcolor": "#355"
+    },
+    {
+      "id": 14,
+      "type": "KSampler",
+      "pos": [1270, 320],
+      "size": [320, 280],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {"name": "model", "type": "MODEL", "link": 10},
+        {"name": "positive", "type": "CONDITIONING", "link": 11},
+        {"name": "negative", "type": "CONDITIONING", "link": 12},
+        {"name": "latent_image", "type": "LATENT", "link": 14}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [15], "slot_index": 0}
+      ],
+      "title": "✨ MÁY VẼ TINH (lượt 2 - denoise 0.5 ở đây)",
+      "properties": {"Node name for S&R": "KSampler"},
+      "widgets_values": [156680208700286, "randomize", 16, 6, "euler_ancestral", "normal", 0.5],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 8,
+      "type": "VAEDecode",
+      "pos": [1640, 320],
+      "size": [220, 60],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {"name": "samples", "type": "LATENT", "link": 15},
+        {"name": "vae", "type": "VAE", "link": 8}
+      ],
+      "outputs": [
+        {"name": "IMAGE", "type": "IMAGE", "links": [9], "slot_index": 0}
+      ],
+      "title": "🔄 GIẢI MÃ ẢNH NÉT",
+      "properties": {"Node name for S&R": "VAEDecode"}
+    },
+    {
+      "id": 9,
+      "type": "SaveImage",
+      "pos": [1900, 320],
+      "size": [380, 460],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {"name": "images", "type": "IMAGE", "link": 9}
+      ],
+      "title": "🖼️ ẢNH NÉT CĂNG (kết quả cuối)",
+      "properties": {},
+      "widgets_values": ["AnimeHires"],
+      "color": "#223",
+      "bgcolor": "#335"
+    },
+    {
+      "id": 15,
+      "type": "VAEDecode",
+      "pos": [1270, 680],
+      "size": [220, 60],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {"name": "samples", "type": "LATENT", "link": 16},
+        {"name": "vae", "type": "VAE", "link": 17}
+      ],
+      "outputs": [
+        {"name": "IMAGE", "type": "IMAGE", "links": [18], "slot_index": 0}
+      ],
+      "title": "🔄 Giải mã bản nháp",
+      "properties": {"Node name for S&R": "VAEDecode"}
+    },
+    {
+      "id": 16,
+      "type": "PreviewImage",
+      "pos": [1540, 680],
+      "size": [300, 340],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {"name": "images", "type": "IMAGE", "link": 18}
+      ],
+      "title": "👀 XEM BẢN NHÁP (so sánh trước/sau)",
+      "properties": {},
+      "color": "#233",
+      "bgcolor": "#355"
+    }
+  ],
+  "links": [
+    [1, 4, 0, 3, 0, "MODEL"],
+    [2, 5, 0, 3, 3, "LATENT"],
+    [3, 4, 1, 6, 0, "CLIP"],
+    [4, 6, 0, 3, 1, "CONDITIONING"],
+    [5, 4, 1, 7, 0, "CLIP"],
+    [6, 7, 0, 3, 2, "CONDITIONING"],
+    [7, 3, 0, 13, 0, "LATENT"],
+    [8, 4, 2, 8, 1, "VAE"],
+    [9, 8, 0, 9, 0, "IMAGE"],
+    [10, 4, 0, 14, 0, "MODEL"],
+    [11, 6, 0, 14, 1, "CONDITIONING"],
+    [12, 7, 0, 14, 2, "CONDITIONING"],
+    [14, 13, 0, 14, 3, "LATENT"],
+    [15, 14, 0, 8, 0, "LATENT"],
+    [16, 3, 0, 15, 0, "LATENT"],
+    [17, 4, 2, 15, 1, "VAE"],
+    [18, 15, 0, 16, 0, "IMAGE"]
+  ],
+  "groups": [
+    {"title": "① VẼ NHÁP (như workflow cũ)", "bounding": [20, 280, 1230, 620], "color": "#3f789e", "font_size": 24},
+    {"title": "② PHÓNG TO + VẼ TINH → ẢNH NÉT", "bounding": [1260, 280, 1040, 520], "color": "#b06634", "font_size": 24}
+  ],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}
