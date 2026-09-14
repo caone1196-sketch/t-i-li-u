@@ -245,8 +245,8 @@ def main():
                         label="Loại trừ THÊM (bộ chống mờ đã có sẵn, chỉ điền nếu muốn thêm)",
                         value="", lines=2)
             with gr.Column(scale=5):
-                anh = gr.Image(label="🖼️ Kết quả (chuột phải → Save image để tải về)",
-                               height=620)
+                anh = gr.Image(label="🖼️ Kết quả (chuột phải → Save image, hoặc nút tải ⬇ góc trên ảnh)",
+                               height=620, format="png", type="pil")
                 trang_thai = gr.Textbox(label="Tiến trình", value="Sẵn sàng.", lines=2)
 
         nut_ve.click(tao_anh,
