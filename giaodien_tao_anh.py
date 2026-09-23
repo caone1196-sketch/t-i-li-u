@@ -357,7 +357,7 @@ def parse_input_image_and_mask(source_input, mask_input=None, detect_black=True,
     """
     Trích xuất ảnh gốc và mask (màu trắng trên nền đen).
     Hỗ trợ:
-    1. Vùng vẽ đè (ImageMask / ImageEditor)
+    1. Vùng vẽ đè (ImageMask / ImageEditor từ Gradio)
     2. Tự động nhận diện pixel màu đen (RGB <= black_threshold) nếu người dùng tô đen bằng bút / paint ngoài rồi upload
     """
     pil_in = None
@@ -368,25 +368,42 @@ def parse_input_image_and_mask(source_input, mask_input=None, detect_black=True,
 
     # Xử lý input từ Gradio (dict / Image.Image / filepath)
     if isinstance(source_input, dict):
-        if 'background' in source_input and source_input['background'] is not None:
-            pil_in = source_input['background']
-        elif 'image' in source_input and source_input['image'] is not None:
-            pil_in = source_input['image']
-        elif 'composite' in source_input and source_input['composite'] is not None:
-            pil_in = source_input['composite']
-        elif 'name' in source_input:
-            pil_in = Image.open(source_input['name'])
+        bg = source_input.get('background')
+        composite = source_input.get('composite')
+        image = source_input.get('image')
 
-        # Lấy mask vẽ từ layers / mask
-        if 'layers' in source_input and source_input['layers']:
-            for layer in source_input['layers']:
-                if isinstance(layer, Image.Image):
-                    layer_rgba = layer.convert('RGBA')
-                    alpha = layer_rgba.split()[-1]
-                    if np.count_nonzero(np.array(alpha)) > 15:
-                        pil_mask = alpha
-                        break
-        elif 'mask' in source_input and source_input['mask'] is not None:
+        # Ưu tiên lấy background (ảnh gốc trước khi bị vẽ đè màu cọ)
+        for candidate in [bg, composite, image]:
+            if candidate is not None:
+                if isinstance(candidate, Image.Image):
+                    pil_in = candidate.copy()
+                    break
+                elif isinstance(candidate, str) and os.path.isfile(candidate):
+                    pil_in = Image.open(candidate).copy()
+                    break
+                elif isinstance(candidate, dict) and 'name' in candidate:
+                    pil_in = Image.open(candidate['name']).copy()
+                    break
+
+        # Trích xuất mask vẽ từ layers của Gradio ImageMask / ImageEditor
+        layers = source_input.get('layers', [])
+        if layers:
+            combined_alpha = None
+            for l in layers:
+                if isinstance(l, Image.Image):
+                    l_rgba = l.convert('RGBA')
+                    l_alpha = l_rgba.split()[-1]
+                    l_arr = np.array(l_alpha)
+                    if np.count_nonzero(l_arr > 10) > 10:
+                        if combined_alpha is None:
+                            combined_alpha = l_arr
+                        else:
+                            combined_alpha = np.maximum(combined_alpha, l_arr)
+            if combined_alpha is not None:
+                pil_mask = Image.fromarray(combined_alpha, mode='L')
+
+        # Trích xuất từ mask dict nếu có
+        if pil_mask is None and 'mask' in source_input and source_input['mask'] is not None:
             m = source_input['mask']
             if isinstance(m, dict) and 'name' in m:
                 m = Image.open(m['name'])
@@ -396,11 +413,11 @@ def parse_input_image_and_mask(source_input, mask_input=None, detect_black=True,
                 else:
                     pil_mask = m.convert('L')
     elif isinstance(source_input, Image.Image):
-        pil_in = source_input
+        pil_in = source_input.copy()
     elif isinstance(source_input, str) and os.path.isfile(source_input):
-        pil_in = Image.open(source_input)
+        pil_in = Image.open(source_input).copy()
 
-    # Nếu có mask riêng truyền vào
+    # Nếu người dùng có upload mask riêng
     if mask_input is not None and pil_mask is None:
         if isinstance(mask_input, Image.Image):
             pil_mask = mask_input
@@ -422,36 +439,58 @@ def parse_input_image_and_mask(source_input, mask_input=None, detect_black=True,
             else:
                 pil_mask = pil_mask.convert('L')
 
-    # Kiểm tra tự động phát hiện vùng đen đã tô nếu được bật hoặc nếu chưa có mask
     msg_detail = []
-    has_drawn_mask = pil_mask is not None and np.count_nonzero(np.array(pil_mask)) > 15
-    if detect_black or not has_drawn_mask:
-        if pil_in is not None:
-            arr = np.array(pil_in)
-            r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
-            # Pixel đen: R, G, B đều <= black_threshold
-            black_pixels = (r <= black_threshold) & (g <= black_threshold) & (b <= black_threshold)
-            black_count = np.count_nonzero(black_pixels)
-            if black_count > 25:
-                black_mask_arr = np.where(black_pixels, 255, 0).astype(np.uint8)
-                detected_black_mask = Image.fromarray(black_mask_arr, mode='L')
-                if pil_mask is not None and has_drawn_mask:
-                    # Gộp cả 2 mask
-                    combined = np.maximum(np.array(pil_mask), np.array(detected_black_mask))
-                    pil_mask = Image.fromarray(combined, mode='L')
-                    msg_detail.append(f"Gộp mask vẽ + {black_count} pixel vùng tô đen (ngưỡng {black_threshold})")
-                else:
-                    pil_mask = detected_black_mask
-                    msg_detail.append(f"Tự động nhận diện {black_count} pixel vùng tô đen (ngưỡng {black_threshold})")
+    has_drawn_mask = (pil_mask is not None and np.count_nonzero(np.array(pil_mask) > 10) > 15)
 
-    if pil_mask is None or np.count_nonzero(np.array(pil_mask)) < 15:
+    # Nhận diện vùng màu đen tô trên ảnh gốc
+    if (detect_black or not has_drawn_mask) and pil_in is not None:
+        arr = np.array(pil_in)
+        r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+        # Pixel đen: R, G, B <= black_threshold
+        black_pixels = (r <= black_threshold) & (g <= black_threshold) & (b <= black_threshold)
+        black_count = np.count_nonzero(black_pixels)
+        if black_count > 15:
+            black_mask_arr = np.where(black_pixels, 255, 0).astype(np.uint8)
+            detected_black_mask = Image.fromarray(black_mask_arr, mode='L')
+
+            # Tẩy phần đen thành màu trung bình của vùng xung quanh để VAE không bị lem mực đen khi inpaint
+            surrounding = (~black_pixels)
+            if np.count_nonzero(surrounding) > 50:
+                mean_color = arr[surrounding].mean(axis=0).astype(np.uint8)
+                arr_cleaned = arr.copy()
+                arr_cleaned[black_pixels] = mean_color
+                pil_in = Image.fromarray(arr_cleaned, mode='RGB')
+
+            if pil_mask is not None and has_drawn_mask:
+                combined = np.maximum(np.array(pil_mask), np.array(detected_black_mask))
+                pil_mask = Image.fromarray(combined, mode='L')
+                msg_detail.append(f"Gộp mask cọ vẽ + {black_count} pixel vùng bôi đen (ngưỡng {black_threshold})")
+            else:
+                pil_mask = detected_black_mask
+                msg_detail.append(f"Tự động nhận diện {black_count} pixel vùng bôi đen (ngưỡng {black_threshold})")
+        elif not has_drawn_mask:
+            # Nếu ngưỡng mặc định không ra, thử ngưỡng cao hơn một chút (ngưỡng 55)
+            black_pixels_relaxed = (r <= 55) & (g <= 55) & (b <= 55)
+            black_count_relaxed = np.count_nonzero(black_pixels_relaxed)
+            if black_count_relaxed > 25:
+                black_mask_arr = np.where(black_pixels_relaxed, 255, 0).astype(np.uint8)
+                pil_mask = Image.fromarray(black_mask_arr, mode='L')
+                surrounding = (~black_pixels_relaxed)
+                if np.count_nonzero(surrounding) > 50:
+                    mean_color = arr[surrounding].mean(axis=0).astype(np.uint8)
+                    arr_cleaned = arr.copy()
+                    arr_cleaned[black_pixels_relaxed] = mean_color
+                    pil_in = Image.fromarray(arr_cleaned, mode='RGB')
+                msg_detail.append(f"Tự động nhận diện {black_count_relaxed} pixel vùng bôi đen gần đúng (ngưỡng 55)")
+
+    if pil_mask is None or np.count_nonzero(np.array(pil_mask) > 10) < 10:
         return pil_in, None, "❌ Chưa thấy mask vẽ hoặc vùng đen cần sửa. Hãy dùng bút vẽ lên ảnh hoặc tô đen vùng lỗi (tay/chân/mặt)!"
 
-    # Khớp kích thước mask với ảnh gốc
+    # Khớp kích thước
     if pil_in is not None and pil_mask.size != pil_in.size:
         pil_mask = pil_mask.resize(pil_in.size, Image.Resampling.NEAREST)
 
-    # Mở rộng biên (dilation) để inpaint liền mạch không bị viền lem
+    # Mở rộng biên (dilation)
     if mask_dilation > 0:
         filter_size = max(3, int(mask_dilation) * 2 + 1)
         pil_mask = pil_mask.filter(ImageFilter.MaxFilter(size=filter_size))
@@ -462,7 +501,7 @@ def parse_input_image_and_mask(source_input, mask_input=None, detect_black=True,
 
     # Đưa về RGB (cho ComfyUI ImageToMask red channel)
     pil_mask = pil_mask.convert('RGB')
-    status_str = " | ".join(msg_detail) if msg_detail else "Đã nhận mask vẽ thành công"
+    status_str = " | ".join(msg_detail) if msg_detail else "Đã nhận diện mask thành công"
     return pil_in, pil_mask, status_str
 
 def tao_anh_inpaint_sua_chi_tiet(
@@ -519,9 +558,22 @@ def tao_anh_inpaint_sua_chi_tiet(
     )
 
     yield None, pil_mask, f"⏳ Đang inpaint sửa chi tiết (denoise={denoise}, steps={steps})..."
-    result = yield from run_workflow_with_progress_gen(wf)
+    
+    # Chạy workflow và yield đúng 3 outputs cho Gradio
+    gen = run_workflow_with_progress_gen(wf)
+    result = None
+    try:
+        while True:
+            val = next(gen)
+            # val là (anh, status)
+            yield val[0], pil_mask, val[1]
+    except StopIteration as e:
+        result = e.value
+
     if result is None:
+        yield None, pil_mask, "❌ Quá trình chạy bị gián đoạn."
         return
+
     anh, prompt_id, elapsed = result
     if anh is None:
         yield None, pil_mask, "❌ Hết giờ / không lấy được ảnh từ ComfyUI."
