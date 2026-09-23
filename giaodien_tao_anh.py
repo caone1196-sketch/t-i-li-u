@@ -84,9 +84,16 @@ PRESET = {
 }
 
 KICH_THUOC = {
-    "Dọc 832×1216 (khuyên dùng)": (832, 1216),
-    "Ngang 1216×832": (1216, 832),
-    "Vuông 1024×1024": (1024, 1024),
+    "Dọc 832×1216 (Chuẩn Anime khuyên dùng)": (832, 1216),
+    "Dọc 896×1152 (Tỉ lệ 3:4 chân dung)": (896, 1152),
+    "Dọc 768×1344 (Tỉ lệ 9:16 Story/Điện thoại)": (768, 1344),
+    "Dọc 704×1408 (Toàn thân siêu dài)": (704, 1408),
+    "Vuông 1024×1024 (Tỉ lệ 1:1 Avatar)": (1024, 1024),
+    "Ngang 1216×832 (Ngang khuyên dùng)": (1216, 832),
+    "Ngang 1152×896 (Tỉ lệ 4:3 phong cảnh)": (1152, 896),
+    "Ngang 1344×768 (Tỉ lệ 16:9 Hình nền máy tính)": (1344, 768),
+    "Ngang 1536×640 (Tỉ lệ 21:9 Siêu rộng Cinematic)": (1536, 640),
+    "⚙️ Tùy chỉnh (Nhập Width / Height tự do)": (0, 0),
 }
 
 SAMPLER = {
@@ -270,7 +277,7 @@ def run_workflow_with_progress_gen(wf):
 
     return anh, prompt_id, time.time() - bat_dau
 
-def tao_anh(model, preset_ten, prompt, neg_them, kt_ten, sampler_ten, steps, cfg, seed_nhap):
+def tao_anh(model, preset_ten, prompt, neg_them, kt_ten, custom_w, custom_h, sampler_ten, steps, cfg, seed_nhap):
     if not model:
         yield None, "❌ Chưa có model! Kiểm tra Cell 2 đã tải model chưa, rồi chạy lại Cell 3 và 3B."
         return
@@ -291,7 +298,14 @@ def tao_anh(model, preset_ten, prompt, neg_them, kt_ten, sampler_ten, steps, cfg
     if neg_them.strip():
         neg_full += ", " + neg_them.strip().strip(",")
 
-    w, h = KICH_THUOC[kt_ten]
+    if kt_ten == "⚙️ Tùy chỉnh (Nhập Width / Height tự do)":
+        w = int(custom_w) if custom_w and int(custom_w) > 64 else 832
+        h = int(custom_h) if custom_h and int(custom_h) > 64 else 1216
+    else:
+        w, h = KICH_THUOC.get(kt_ten, (832, 1216))
+    # Bo tròn kích thước về bội số của 64 hoặc 8 (tốt nhất cho SDXL)
+    w = (w // 8) * 8
+    h = (h // 8) * 8
     sampler, scheduler = SAMPLER[sampler_ten]
     seed = random.randint(0, 2**48) if int(seed_nhap) < 0 else int(seed_nhap)
 
@@ -632,6 +646,11 @@ def tao_anh_inpaint(model, prompt, neg_them, input_image, mask_image, denoise, s
     giay = int(elapsed)
     yield anh, f"✅ Inpaint xong sau {giay}s — Seed: {seed}\n{msg}"
 
+
+def update_kich_thuoc_visibility(kt_ten):
+    is_custom = (kt_ten == "⚙️ Tùy chỉnh (Nhập Width / Height tự do)")
+    return gr.update(visible=is_custom)
+
 def update_inpaint_preset_vals(preset_name):
     if preset_name in PRESET_INPAINT_FIX:
         p = PRESET_INPAINT_FIX[preset_name]
@@ -677,7 +696,14 @@ def main():
                 with gr.Column(scale=5):
                     prompt = gr.Textbox(label="✏️ Mô tả ảnh (tag Danbooru, tiếng Anh)", value="1girl, solo, long hair, nude, naked, nsfw, large breasts, sitting, bedroom, soft lighting", lines=3)
                     preset = gr.Radio(list(PRESET.keys()), value="Nude - ngồi", label="🎭 Phong cách nhanh")
-                    kich_thuoc = gr.Radio(list(KICH_THUOC.keys()), value="Dọc 832×1216 (khuyên dùng)", label="📐 Kích thước")
+                    kich_thuoc = gr.Dropdown(
+                        list(KICH_THUOC.keys()),
+                        value="Dọc 832×1216 (Chuẩn Anime khuyên dùng)",
+                        label="📐 Tùy chọn Độ phân giải & Tỉ lệ khung hình (Aspect Ratio)"
+                    )
+                    with gr.Row(visible=False) as custom_res_row:
+                        custom_w = gr.Slider(512, 2048, value=832, step=64, label="Chiều rộng (Width px)")
+                        custom_h = gr.Slider(512, 2048, value=1216, step=64, label="Chiều cao (Height px)")
                     nut_ve = gr.Button("🖌️ VẼ ẢNH NUDE", variant="primary", size="lg")
                     with gr.Accordion("⚙️ Nâng cao", open=False):
                         model = gr.Dropdown(models, value=mac_dinh, label="Model")
@@ -689,7 +715,16 @@ def main():
                 with gr.Column(scale=5):
                     anh = gr.Image(label="🖼️ Kết quả", height=620, format="png", type="pil")
                     trang_thai = gr.Textbox(label="Tiến trình", value="Sẵn sàng.", lines=3, elem_classes=["status-box"])
-            nut_ve.click(tao_anh, inputs=[model, preset, prompt, neg_them, kich_thuoc, sampler, steps, cfg, seed], outputs=[anh, trang_thai])
+            kich_thuoc.change(
+                update_kich_thuoc_visibility,
+                inputs=[kich_thuoc],
+                outputs=[custom_res_row]
+            )
+            nut_ve.click(
+                tao_anh,
+                inputs=[model, preset, prompt, neg_them, kich_thuoc, custom_w, custom_h, sampler, steps, cfg, seed],
+                outputs=[anh, trang_thai]
+            )
 
         # TAB 2
         with gr.Tab("2️⃣ Sửa ảnh có sẵn thành nude (Img2Img / Undress)"):
