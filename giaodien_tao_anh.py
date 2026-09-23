@@ -118,12 +118,12 @@ def lay_danh_sach_model():
     except Exception:
         return []
 
-def build_workflow(model, pos, neg, w, h, steps, cfg, seed, sampler, scheduler):
+def build_workflow(model, pos, neg, w, h, steps, cfg, seed, sampler, scheduler, batch_size=1):
     return {
         "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": model}},
         "2": {"class_type": "CLIPTextEncode", "inputs": {"text": pos, "clip": ["1", 1]}},
         "3": {"class_type": "CLIPTextEncode", "inputs": {"text": neg, "clip": ["1", 1]}},
-        "4": {"class_type": "EmptyLatentImage", "inputs": {"width": w, "height": h, "batch_size": 1}},
+        "4": {"class_type": "EmptyLatentImage", "inputs": {"width": w, "height": h, "batch_size": int(batch_size)}},
         "5": {"class_type": "KSampler", "inputs": {
             "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0],
             "latent_image": ["4", 0], "seed": seed, "steps": steps, "cfg": cfg,
@@ -202,17 +202,25 @@ def upload_image_to_comfy(pil_image, filename="upload.png"):
         except Exception as e2:
             raise RuntimeError(f"Upload ảnh lên ComfyUI thất bại: {e} / {e2}")
 
-def tai_anh_ket_qua(prompt_id):
+def tai_tat_ca_anh_ket_qua(prompt_id):
     hist = http_json(f"{COMFY}/history/{prompt_id}")
     if prompt_id not in hist:
-        return None
+        return []
+    results = []
     for node_out in hist[prompt_id]["outputs"].values():
         for img in node_out.get("images", []):
-            q = urllib.parse.urlencode(
-                {"filename": img["filename"], "subfolder": img.get("subfolder", ""), "type": img.get("type", "output")})
-            with urllib.request.urlopen(f"{COMFY}/view?{q}", timeout=60) as r:
-                return Image.open(io.BytesIO(r.read())).copy()
-    return None
+            try:
+                q = urllib.parse.urlencode(
+                    {"filename": img["filename"], "subfolder": img.get("subfolder", ""), "type": img.get("type", "output")})
+                with urllib.request.urlopen(f"{COMFY}/view?{q}", timeout=60) as r:
+                    results.append(Image.open(io.BytesIO(r.read())).copy())
+            except Exception:
+                pass
+    return results
+
+def tai_anh_ket_qua(prompt_id):
+    imgs = tai_tat_ca_anh_ket_qua(prompt_id)
+    return imgs[0] if imgs else None
 
 def run_workflow_with_progress_gen(wf):
     """Wrapper nhận workflow và yield thanh tiến trình qua WebSocket"""
@@ -264,20 +272,21 @@ def run_workflow_with_progress_gen(wf):
         except Exception:
             pass
 
-    anh = None
-    for _ in range(10):
-        anh = tai_anh_ket_qua(prompt_id)
-        if anh is not None:
+    anh_list = []
+    for _ in range(15):
+        anh_list = tai_tat_ca_anh_ket_qua(prompt_id)
+        if anh_list:
             break
         time.sleep(1)
 
-    if anh is None:
+    if not anh_list:
         yield None, "❌ Hết giờ / không lấy được ảnh"
         return None
 
-    return anh, prompt_id, time.time() - bat_dau
+    # Nếu chỉ có 1 ảnh thì trả về ảnh đó, nếu nhiều thì trả về danh sách ảnh
+    return anh_list, prompt_id, time.time() - bat_dau
 
-def tao_anh(model, preset_ten, prompt, neg_them, kt_ten, custom_w, custom_h, sampler_ten, steps, cfg, seed_nhap):
+def tao_anh(model, preset_ten, prompt, neg_them, kt_ten, custom_w, custom_h, so_luong, sampler_ten, steps, cfg, seed_nhap):
     if not model:
         yield None, "❌ Chưa có model! Kiểm tra Cell 2 đã tải model chưa, rồi chạy lại Cell 3 và 3B."
         return
@@ -309,18 +318,21 @@ def tao_anh(model, preset_ten, prompt, neg_them, kt_ten, custom_w, custom_h, sam
     sampler, scheduler = SAMPLER[sampler_ten]
     seed = random.randint(0, 2**48) if int(seed_nhap) < 0 else int(seed_nhap)
 
-    wf = build_workflow(model, prompt_full, neg_full, w, h, int(steps), float(cfg), seed, sampler, scheduler)
+    batch_n = max(1, min(8, int(so_luong))) if so_luong else 1
+    wf = build_workflow(model, prompt_full, neg_full, w, h, int(steps), float(cfg), seed, sampler, scheduler, batch_size=batch_n)
 
     yield None, "⏳ Đã gửi yêu cầu — đang xếp hàng..."
     result = yield from run_workflow_with_progress_gen(wf)
     if result is None:
         return
-    anh, prompt_id, elapsed = result
-    if anh is None:
+    anh_list, prompt_id, elapsed = result
+    if not anh_list:
         yield None, "❌ Hết giờ / không lấy được ảnh. Chạy Cell 4 xem log ComfyUI."
         return
     giay = int(elapsed)
-    yield anh, f"✅ Xong sau {giay} giây!   🌱 Seed: {seed}\n(Lưu seed này lại nếu muốn vẽ lại đúng ảnh này — nhập vào ô Seed)"
+    dem = len(anh_list)
+    msg_xong = f"✅ Xong {dem} ảnh sau {giay}s!   🌱 Seed: {seed}\n(Bấm vào từng ảnh để phóng to và tải về)"
+    yield anh_list, msg_xong
 
 def tao_anh_img2img(model, prompt, neg_them, input_image, denoise, sampler_ten, steps, cfg, seed_nhap):
     if not model:
@@ -360,7 +372,8 @@ def tao_anh_img2img(model, prompt, neg_them, input_image, denoise, sampler_ten, 
     result = yield from run_workflow_with_progress_gen(wf)
     if result is None:
         return
-    anh, prompt_id, elapsed = result
+    anh_res, prompt_id, elapsed = result
+    anh = anh_res[0] if isinstance(anh_res, list) and anh_res else anh_res
     if anh is None:
         yield None, "❌ Hết giờ / không lấy được ảnh"
         return
@@ -588,7 +601,8 @@ def tao_anh_inpaint_sua_chi_tiet(
         yield None, pil_mask, "❌ Quá trình chạy bị gián đoạn."
         return
 
-    anh, prompt_id, elapsed = result
+    anh_res, prompt_id, elapsed = result
+    anh = anh_res[0] if isinstance(anh_res, list) and anh_res else anh_res
     if anh is None:
         yield None, pil_mask, "❌ Hết giờ / không lấy được ảnh từ ComfyUI."
         return
@@ -639,7 +653,8 @@ def tao_anh_inpaint(model, prompt, neg_them, input_image, mask_image, denoise, s
     result = yield from run_workflow_with_progress_gen(wf)
     if result is None:
         return
-    anh, prompt_id, elapsed = result
+    anh_res, prompt_id, elapsed = result
+    anh = anh_res[0] if isinstance(anh_res, list) and anh_res else anh_res
     if anh is None:
         yield None, "❌ Hết giờ"
         return
@@ -704,6 +719,7 @@ def main():
                     with gr.Row(visible=False) as custom_res_row:
                         custom_w = gr.Slider(512, 2048, value=832, step=64, label="Chiều rộng (Width px)")
                         custom_h = gr.Slider(512, 2048, value=1216, step=64, label="Chiều cao (Height px)")
+                    so_luong_anh = gr.Slider(1, 4, value=1, step=1, label="🔢 Số lượng ảnh tạo mỗi lần (Batch Size — 1 đến 4 ảnh)")
                     nut_ve = gr.Button("🖌️ VẼ ẢNH NUDE", variant="primary", size="lg")
                     with gr.Accordion("⚙️ Nâng cao", open=False):
                         model = gr.Dropdown(models, value=mac_dinh, label="Model")
@@ -713,7 +729,14 @@ def main():
                         seed = gr.Number(value=-1, precision=0, label="Seed (-1 = ngẫu nhiên)")
                         neg_them = gr.Textbox(label="Loại trừ thêm (đã có sẵn censored, clothes...)", value="", lines=2)
                 with gr.Column(scale=5):
-                    anh = gr.Image(label="🖼️ Kết quả", height=620, format="png", type="pil")
+                    anh = gr.Gallery(
+                        label="🖼️ Bộ sưu tập kết quả (Nhấp để phóng to / tải về)",
+                        height=620,
+                        columns=[2],
+                        rows=[2],
+                        object_fit="contain",
+                        preview=True
+                    )
                     trang_thai = gr.Textbox(label="Tiến trình", value="Sẵn sàng.", lines=3, elem_classes=["status-box"])
             kich_thuoc.change(
                 update_kich_thuoc_visibility,
@@ -722,7 +745,7 @@ def main():
             )
             nut_ve.click(
                 tao_anh,
-                inputs=[model, preset, prompt, neg_them, kich_thuoc, custom_w, custom_h, sampler, steps, cfg, seed],
+                inputs=[model, preset, prompt, neg_them, kich_thuoc, custom_w, custom_h, so_luong_anh, sampler, steps, cfg, seed],
                 outputs=[anh, trang_thai]
             )
 
