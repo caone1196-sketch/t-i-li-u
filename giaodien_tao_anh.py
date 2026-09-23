@@ -10,7 +10,9 @@ Model mặc định: noobai-XL-1.1.safetensors (file Drive của bạn) — Eule
 Quy trình:
 - Tab 1: Tạo ảnh nude từ text (txt2img)
 - Tab 2: Sửa ảnh có sẵn thành nude (img2img / undress) — upload ảnh mặc đồ → đổi thành nude
-- Tab 3: Inpaint — chỉ xóa vùng chọn (vẽ mask lên áo/quần)
+- Tab 3: Sửa tay / chân / mặt / Inpaint vùng tô đen chuyên dụng (hỗ trợ tự bắt vùng đen hoặc vẽ mask)
+- Tab 4: Inpaint xóa áo/quần (cũ)
+- Tab 5: Workflow JSON
 """
 import json
 import random
@@ -20,6 +22,8 @@ import urllib.request
 import urllib.parse
 import os
 import io
+import numpy as np
+from PIL import Image, ImageFilter
 
 COMFY = "http://127.0.0.1:8188"
 CLIENT_ID = str(uuid.uuid4())
@@ -36,6 +40,35 @@ NEG_MAC_DINH = (
 )
 
 NEG_NUDE = NEG_MAC_DINH + ", clothes, dress, shirt, bikini, bra, panties"
+
+# Preset sửa tay, chân, mặt, anatomy
+PRESET_INPAINT_FIX = {
+    "🖐️ Sửa tay (Fix Hands)": {
+        "prompt": "perfect anime hands, detailed fingers, 5 fingers, beautiful slender hands, anatomically correct hands, delicate fingers, highly detailed skin",
+        "neg": "bad hands, mutated hands, extra digits, fewer digits, missing fingers, fused fingers, distorted fingers, extra fingers, malformed limbs",
+        "denoise": 0.85,
+    },
+    "🦶 Sửa chân / ngón chân (Fix Feet)": {
+        "prompt": "beautiful anime feet, perfect toes, 5 toes, slender ankles, detailed soles, anatomically correct feet, smooth legs, delicate feet",
+        "neg": "bad feet, mutated feet, extra toes, fewer toes, missing toes, fused toes, deformed limbs, distorted feet",
+        "denoise": 0.85,
+    },
+    "👁️ Sửa khuôn mặt & mắt (Fix Face & Eyes)": {
+        "prompt": "masterpiece, beautiful detailed face, symmetrical detailed eyes, expressive eyes, cute anime mouth, sharp focus, perfect anime face, soft skin, blush",
+        "neg": "ugly face, deformed eyes, crossed eyes, bad pupils, blurry face, distorted mouth, bad teeth, asymmetry",
+        "denoise": 0.75,
+    },
+    "👙 Đổi quần áo thành da Nude (Undress Inpaint)": {
+        "prompt": "nude, naked, nsfw, bare breasts, bare nipples, bare pussy, fully nude, smooth skin, detailed body, no clothes, natural lighting",
+        "neg": "clothes, dress, shirt, bra, panties, swimwear, underwear, censor, mosaic",
+        "denoise": 0.95,
+    },
+    "✨ Vẽ lại tự do (Custom Prompt)": {
+        "prompt": "masterpiece, best quality, detailed, natural skin texture, seamless blend",
+        "neg": "worst quality, low quality, blurry, deformed, artifact, glitch",
+        "denoise": 0.85,
+    },
+}
 
 # Phong cách
 PRESET = {
@@ -93,7 +126,6 @@ def build_workflow(model, pos, neg, w, h, steps, cfg, seed, sampler, scheduler):
     }
 
 def build_workflow_img2img(model, pos, neg, steps, cfg, seed, sampler, scheduler, denoise, image_filename):
-    # LoadImage -> VAEEncode -> KSampler -> VAEDecode
     return {
         "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": model}},
         "2": {"class_type": "CLIPTextEncode", "inputs": {"text": pos, "clip": ["1", 1]}},
@@ -108,7 +140,7 @@ def build_workflow_img2img(model, pos, neg, steps, cfg, seed, sampler, scheduler
         "8": {"class_type": "SaveImage", "inputs": {"images": ["7", 0], "filename_prefix": "NoobAI_Nude_Img2Img"}},
     }
 
-def build_workflow_inpaint(model, pos, neg, steps, cfg, seed, sampler, scheduler, denoise, image_filename, mask_filename):
+def build_workflow_inpaint(model, pos, neg, steps, cfg, seed, sampler, scheduler, denoise, image_filename, mask_filename, grow_mask=6):
     return {
         "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": model}},
         "2": {"class_type": "CLIPTextEncode", "inputs": {"text": pos, "clip": ["1", 1]}},
@@ -116,7 +148,7 @@ def build_workflow_inpaint(model, pos, neg, steps, cfg, seed, sampler, scheduler
         "4": {"class_type": "LoadImage", "inputs": {"image": image_filename}},
         "5": {"class_type": "LoadImage", "inputs": {"image": mask_filename}},
         "6": {"class_type": "ImageToMask", "inputs": {"image": ["5", 0], "channel": "red"}},
-        "7": {"class_type": "VAEEncodeForInpaint", "inputs": {"pixels": ["4", 0], "mask": ["6", 0], "vae": ["1", 2], "grow_mask_by": 6}},
+        "7": {"class_type": "VAEEncodeForInpaint", "inputs": {"pixels": ["4", 0], "mask": ["6", 0], "vae": ["1", 2], "grow_mask_by": int(grow_mask)}},
         "8": {"class_type": "KSampler", "inputs": {
             "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0],
             "latent_image": ["7", 0], "seed": seed, "steps": steps, "cfg": cfg,
@@ -127,11 +159,8 @@ def build_workflow_inpaint(model, pos, neg, steps, cfg, seed, sampler, scheduler
 
 def upload_image_to_comfy(pil_image, filename="upload.png"):
     """Upload PIL Image lên ComfyUI /upload/image, trả về tên file trên server"""
-    # ComfyUI upload expects multipart/form-data
-    import requests
-    # Fallback nếu không có requests thì dùng urllib
     try:
-        # thử requests
+        import requests
         buf = io.BytesIO()
         pil_image.save(buf, format='PNG')
         buf.seek(0)
@@ -142,16 +171,12 @@ def upload_image_to_comfy(pil_image, filename="upload.png"):
         j = resp.json()
         return j['name']
     except Exception as e:
-        # fallback urllib
         try:
-            import http.client
-            import mimetypes
             buf = io.BytesIO()
             pil_image.save(buf, format='PNG')
             image_data = buf.getvalue()
             boundary = '----WebKitFormBoundary' + uuid.uuid4().hex[:16]
             body = b''
-            # overwrite field
             body += f'--{boundary}\r\n'.encode()
             body += b'Content-Disposition: form-data; name="overwrite"\r\n\r\ntrue\r\n'
             body += f'--{boundary}\r\n'.encode()
@@ -171,7 +196,6 @@ def upload_image_to_comfy(pil_image, filename="upload.png"):
             raise RuntimeError(f"Upload ảnh lên ComfyUI thất bại: {e} / {e2}")
 
 def tai_anh_ket_qua(prompt_id):
-    from PIL import Image
     hist = http_json(f"{COMFY}/history/{prompt_id}")
     if prompt_id not in hist:
         return None
@@ -183,8 +207,8 @@ def tai_anh_ket_qua(prompt_id):
                 return Image.open(io.BytesIO(r.read())).copy()
     return None
 
-def run_workflow_with_progress(wf):
-    """Gửi workflow và đợi, yield trạng thái"""
+def run_workflow_with_progress_gen(wf):
+    """Wrapper nhận workflow và yield thanh tiến trình qua WebSocket"""
     ws = None
     try:
         import websocket
@@ -240,6 +264,10 @@ def run_workflow_with_progress(wf):
             break
         time.sleep(1)
 
+    if anh is None:
+        yield None, "❌ Hết giờ / không lấy được ảnh"
+        return None
+
     return anh, prompt_id, time.time() - bat_dau
 
 def tao_anh(model, preset_ten, prompt, neg_them, kt_ten, sampler_ten, steps, cfg, seed_nhap):
@@ -259,7 +287,6 @@ def tao_anh(model, preset_ten, prompt, neg_them, kt_ten, sampler_ten, steps, cfg
 
     neg_full = NEG_MAC_DINH + p["neg"]
     if "nude" in prompt_full.lower() or "naked" in prompt_full.lower() or "nsfw" in prompt_full.lower():
-        # nếu là nude thì thêm NEG_NUDE để tránh che
         neg_full = NEG_NUDE + p["neg"]
     if neg_them.strip():
         neg_full += ", " + neg_them.strip().strip(",")
@@ -281,69 +308,6 @@ def tao_anh(model, preset_ten, prompt, neg_them, kt_ten, sampler_ten, steps, cfg
     giay = int(elapsed)
     yield anh, f"✅ Xong sau {giay} giây!   🌱 Seed: {seed}\n(Lưu seed này lại nếu muốn vẽ lại đúng ảnh này — nhập vào ô Seed)"
 
-def run_workflow_with_progress_gen(wf):
-    """Wrapper để dùng yield from trong tao_anh"""
-    ws = None
-    try:
-        import websocket
-        ws = websocket.create_connection(f"ws://127.0.0.1:8188/ws?clientId={CLIENT_ID}", timeout=5)
-        ws.settimeout(2)
-    except Exception:
-        ws = None
-
-    try:
-        res = http_json(f"{COMFY}/prompt", {"prompt": wf, "client_id": CLIENT_ID})
-        prompt_id = res["prompt_id"]
-    except Exception as e:
-        yield None, f"❌ Không gửi được tới ComfyUI: {e}\n→ Chạy lại Cell 3 rồi chạy lại Cell 3B."
-        return None
-
-    bat_dau = time.time()
-    xong = False
-    while not xong and time.time() - bat_dau < 600:
-        if ws is not None:
-            try:
-                msg = ws.recv()
-                if isinstance(msg, str):
-                    m = json.loads(msg)
-                    if m.get("type") == "progress":
-                        d = m["data"]
-                        pct = int(d["value"] / max(d["max"], 1) * 100)
-                        thanh = "█" * (pct // 5) + "░" * (20 - pct // 5)
-                        yield None, f"🖌️ Đang vẽ  {thanh}  bước {d['value']}/{d['max']} ({pct}%)"
-                    elif (m.get("type") == "executing" and m["data"].get("node") is None and m["data"].get("prompt_id") == prompt_id):
-                        xong = True
-            except Exception:
-                pass
-        else:
-            time.sleep(1.5)
-        if not xong:
-            try:
-                hist = http_json(f"{COMFY}/history/{prompt_id}")
-                if prompt_id in hist:
-                    xong = True
-            except Exception:
-                pass
-
-    if ws is not None:
-        try:
-            ws.close()
-        except Exception:
-            pass
-
-    anh = None
-    for _ in range(10):
-        anh = tai_anh_ket_qua(prompt_id)
-        if anh is not None:
-            break
-        time.sleep(1)
-
-    if anh is None:
-        yield None, "❌ Hết giờ / không lấy được ảnh"
-        return None
-
-    return anh, prompt_id, time.time() - bat_dau
-
 def tao_anh_img2img(model, prompt, neg_them, input_image, denoise, sampler_ten, steps, cfg, seed_nhap):
     if not model:
         yield None, "❌ Chưa có model!"
@@ -362,15 +326,12 @@ def tao_anh_img2img(model, prompt, neg_them, input_image, denoise, sampler_ten, 
     sampler, scheduler = SAMPLER[sampler_ten]
     seed = random.randint(0, 2**48) if int(seed_nhap) < 0 else int(seed_nhap)
 
-    # Upload ảnh lên ComfyUI
     yield None, "⏳ Đang upload ảnh lên ComfyUI..."
     try:
-        from PIL import Image
-        if isinstance(input_image, dict):  # gradio may return dict
+        if isinstance(input_image, dict):
             pil = Image.open(input_image['name'])
         else:
             pil = input_image
-        # Đảm bảo RGB
         if pil.mode != 'RGB':
             pil = pil.convert('RGB')
         filename = f"upload_{uuid.uuid4().hex[:8]}.png"
@@ -382,68 +343,191 @@ def tao_anh_img2img(model, prompt, neg_them, input_image, denoise, sampler_ten, 
     wf = build_workflow_img2img(model, prompt_full, neg_full, int(steps), float(cfg), seed, sampler, scheduler, float(denoise), server_filename)
 
     yield None, f"⏳ Đã upload {server_filename} — đang xử lý img2img denoise={denoise}..."
-    # chạy workflow
-    ws = None
-    try:
-        import websocket
-        ws = websocket.create_connection(f"ws://127.0.0.1:8188/ws?clientId={CLIENT_ID}", timeout=5)
-        ws.settimeout(2)
-    except Exception:
-        ws = None
-
-    try:
-        res = http_json(f"{COMFY}/prompt", {"prompt": wf, "client_id": CLIENT_ID})
-        prompt_id = res["prompt_id"]
-    except Exception as e:
-        yield None, f"❌ Không gửi được tới ComfyUI: {e}"
+    result = yield from run_workflow_with_progress_gen(wf)
+    if result is None:
         return
-
-    bat_dau = time.time()
-    xong = False
-    while not xong and time.time() - bat_dau < 600:
-        if ws is not None:
-            try:
-                msg = ws.recv()
-                if isinstance(msg, str):
-                    m = json.loads(msg)
-                    if m.get("type") == "progress":
-                        d = m["data"]
-                        pct = int(d["value"] / max(d["max"], 1) * 100)
-                        thanh = "█" * (pct // 5) + "░" * (20 - pct // 5)
-                        yield None, f"🖌️ Đang sửa ảnh  {thanh}  bước {d['value']}/{d['max']} ({pct}%)"
-                    elif (m.get("type") == "executing" and m["data"].get("node") is None and m["data"].get("prompt_id") == prompt_id):
-                        xong = True
-            except Exception:
-                pass
-        else:
-            time.sleep(1.5)
-        if not xong:
-            try:
-                hist = http_json(f"{COMFY}/history/{prompt_id}")
-                if prompt_id in hist:
-                    xong = True
-            except Exception:
-                pass
-
-    if ws is not None:
-        try:
-            ws.close()
-        except Exception:
-            pass
-
-    anh = None
-    for _ in range(10):
-        anh = tai_anh_ket_qua(prompt_id)
-        if anh is not None:
-            break
-        time.sleep(1)
-
+    anh, prompt_id, elapsed = result
     if anh is None:
         yield None, "❌ Hết giờ / không lấy được ảnh"
         return
-
-    giay = int(time.time() - bat_dau)
+    giay = int(elapsed)
     yield anh, f"✅ Xong sau {giay} giây! Denoise={denoise} — Seed: {seed}\nMẹo: denoise 0.55-0.65 giữ dáng, 0.7-0.85 đổi nhiều hơn"
+
+def parse_input_image_and_mask(source_input, mask_input=None, detect_black=True, black_threshold=35, mask_dilation=4, mask_blur=2):
+    """
+    Trích xuất ảnh gốc và mask (màu trắng trên nền đen).
+    Hỗ trợ:
+    1. Vùng vẽ đè (ImageMask / ImageEditor)
+    2. Tự động nhận diện pixel màu đen (RGB <= black_threshold) nếu người dùng tô đen bằng bút / paint ngoài rồi upload
+    """
+    pil_in = None
+    pil_mask = None
+
+    if source_input is None:
+        return None, None, "Chưa cung cấp ảnh đầu vào"
+
+    # Xử lý input từ Gradio (dict / Image.Image / filepath)
+    if isinstance(source_input, dict):
+        if 'background' in source_input and source_input['background'] is not None:
+            pil_in = source_input['background']
+        elif 'image' in source_input and source_input['image'] is not None:
+            pil_in = source_input['image']
+        elif 'composite' in source_input and source_input['composite'] is not None:
+            pil_in = source_input['composite']
+        elif 'name' in source_input:
+            pil_in = Image.open(source_input['name'])
+
+        # Lấy mask vẽ từ layers / mask
+        if 'layers' in source_input and source_input['layers']:
+            for layer in source_input['layers']:
+                if isinstance(layer, Image.Image):
+                    layer_rgba = layer.convert('RGBA')
+                    alpha = layer_rgba.split()[-1]
+                    if np.count_nonzero(np.array(alpha)) > 15:
+                        pil_mask = alpha
+                        break
+        elif 'mask' in source_input and source_input['mask'] is not None:
+            m = source_input['mask']
+            if isinstance(m, dict) and 'name' in m:
+                m = Image.open(m['name'])
+            if isinstance(m, Image.Image):
+                if m.mode == 'RGBA':
+                    pil_mask = m.split()[-1]
+                else:
+                    pil_mask = m.convert('L')
+    elif isinstance(source_input, Image.Image):
+        pil_in = source_input
+    elif isinstance(source_input, str) and os.path.isfile(source_input):
+        pil_in = Image.open(source_input)
+
+    # Nếu có mask riêng truyền vào
+    if mask_input is not None and pil_mask is None:
+        if isinstance(mask_input, Image.Image):
+            pil_mask = mask_input
+        elif isinstance(mask_input, dict):
+            if 'mask' in mask_input and mask_input['mask'] is not None:
+                m = mask_input['mask']
+                pil_mask = Image.open(m['name']) if isinstance(m, dict) and 'name' in m else m
+            elif 'image' in mask_input and mask_input['image'] is not None:
+                m = mask_input['image']
+                pil_mask = Image.open(m['name']) if isinstance(m, dict) and 'name' in m else m
+
+    if pil_in is not None:
+        pil_in = pil_in.convert('RGB')
+
+    if pil_mask is not None:
+        if isinstance(pil_mask, Image.Image):
+            if pil_mask.mode == 'RGBA':
+                pil_mask = pil_mask.split()[-1]
+            else:
+                pil_mask = pil_mask.convert('L')
+
+    # Kiểm tra tự động phát hiện vùng đen đã tô nếu được bật hoặc nếu chưa có mask
+    msg_detail = []
+    has_drawn_mask = pil_mask is not None and np.count_nonzero(np.array(pil_mask)) > 15
+    if detect_black or not has_drawn_mask:
+        if pil_in is not None:
+            arr = np.array(pil_in)
+            r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+            # Pixel đen: R, G, B đều <= black_threshold
+            black_pixels = (r <= black_threshold) & (g <= black_threshold) & (b <= black_threshold)
+            black_count = np.count_nonzero(black_pixels)
+            if black_count > 25:
+                black_mask_arr = np.where(black_pixels, 255, 0).astype(np.uint8)
+                detected_black_mask = Image.fromarray(black_mask_arr, mode='L')
+                if pil_mask is not None and has_drawn_mask:
+                    # Gộp cả 2 mask
+                    combined = np.maximum(np.array(pil_mask), np.array(detected_black_mask))
+                    pil_mask = Image.fromarray(combined, mode='L')
+                    msg_detail.append(f"Gộp mask vẽ + {black_count} pixel vùng tô đen (ngưỡng {black_threshold})")
+                else:
+                    pil_mask = detected_black_mask
+                    msg_detail.append(f"Tự động nhận diện {black_count} pixel vùng tô đen (ngưỡng {black_threshold})")
+
+    if pil_mask is None or np.count_nonzero(np.array(pil_mask)) < 15:
+        return pil_in, None, "❌ Chưa thấy mask vẽ hoặc vùng đen cần sửa. Hãy dùng bút vẽ lên ảnh hoặc tô đen vùng lỗi (tay/chân/mặt)!"
+
+    # Khớp kích thước mask với ảnh gốc
+    if pil_in is not None and pil_mask.size != pil_in.size:
+        pil_mask = pil_mask.resize(pil_in.size, Image.Resampling.NEAREST)
+
+    # Mở rộng biên (dilation) để inpaint liền mạch không bị viền lem
+    if mask_dilation > 0:
+        filter_size = max(3, int(mask_dilation) * 2 + 1)
+        pil_mask = pil_mask.filter(ImageFilter.MaxFilter(size=filter_size))
+
+    # Làm mờ viền (feather/blur)
+    if mask_blur > 0:
+        pil_mask = pil_mask.filter(ImageFilter.GaussianBlur(radius=int(mask_blur)))
+
+    # Đưa về RGB (cho ComfyUI ImageToMask red channel)
+    pil_mask = pil_mask.convert('RGB')
+    status_str = " | ".join(msg_detail) if msg_detail else "Đã nhận mask vẽ thành công"
+    return pil_in, pil_mask, status_str
+
+def tao_anh_inpaint_sua_chi_tiet(
+    model, preset_fix, prompt_inpaint, neg_them, input_image,
+    denoise, sampler_ten, steps, cfg, seed_nhap,
+    detect_black, black_threshold, mask_dilation, mask_blur
+):
+    """Hàm inpaint tối ưu chuyên sửa tay, chân, mặt, vùng tô đen"""
+    if not model:
+        yield None, None, "❌ Chưa có model! Hãy kiểm tra Cell 2."
+        return
+    if input_image is None:
+        yield None, None, "❌ Chưa tải ảnh lên. Hãy upload ảnh cần sửa tay/chân/mặt."
+        return
+
+    yield None, None, "🔍 Đang phân tích ảnh & bóc tách vùng tô đen / mask vẽ..."
+    pil_in, pil_mask, msg = parse_input_image_and_mask(
+        input_image, None,
+        detect_black=bool(detect_black),
+        black_threshold=int(black_threshold),
+        mask_dilation=int(mask_dilation),
+        mask_blur=int(mask_blur)
+    )
+
+    if pil_mask is None:
+        yield None, None, msg
+        return
+
+    # Prompt từ preset
+    p_cfg = PRESET_INPAINT_FIX.get(preset_fix, PRESET_INPAINT_FIX["✨ Vẽ lại tự do (Custom Prompt)"])
+    chosen_prompt = prompt_inpaint.strip() if prompt_inpaint.strip() else p_cfg["prompt"]
+    prompt_full = QUALITY + ", " + chosen_prompt.rstrip(",")
+    neg_full = NEG_MAC_DINH + ", " + p_cfg["neg"]
+    if neg_them.strip():
+        neg_full += ", " + neg_them.strip().strip(",")
+
+    sampler, scheduler = SAMPLER[sampler_ten]
+    seed = random.randint(0, 2**48) if int(seed_nhap) < 0 else int(seed_nhap)
+
+    yield None, pil_mask, f"⏳ {msg} — Đang tải lên ComfyUI..."
+    try:
+        fn_in = f"fix_in_{uuid.uuid4().hex[:8]}.png"
+        fn_mask = f"fix_mask_{uuid.uuid4().hex[:8]}.png"
+        server_in = upload_image_to_comfy(pil_in, fn_in)
+        server_mask = upload_image_to_comfy(pil_mask, fn_mask)
+    except Exception as e:
+        yield None, pil_mask, f"❌ Upload ảnh lên ComfyUI thất bại: {e}"
+        return
+
+    wf = build_workflow_inpaint(
+        model, prompt_full, neg_full,
+        int(steps), float(cfg), seed, sampler, scheduler,
+        float(denoise), server_in, server_mask, grow_mask=mask_dilation
+    )
+
+    yield None, pil_mask, f"⏳ Đang inpaint sửa chi tiết (denoise={denoise}, steps={steps})..."
+    result = yield from run_workflow_with_progress_gen(wf)
+    if result is None:
+        return
+    anh, prompt_id, elapsed = result
+    if anh is None:
+        yield None, pil_mask, "❌ Hết giờ / không lấy được ảnh từ ComfyUI."
+        return
+    giay = int(elapsed)
+    yield anh, pil_mask, f"✅ Sửa xong sau {giay}s! ({preset_fix}) — Seed: {seed}\n{msg}\nMẹo: Nếu tay/chân vẫn méo, tăng Denoise lên 0.85-0.95 hoặc tô vùng đen rộng hơn một chút để AI có không gian vẽ lại hoàn chỉnh."
 
 def tao_anh_inpaint(model, prompt, neg_them, input_image, mask_image, denoise, sampler_ten, steps, cfg, seed_nhap):
     if not model:
@@ -451,9 +535,6 @@ def tao_anh_inpaint(model, prompt, neg_them, input_image, mask_image, denoise, s
         return
     if input_image is None:
         yield None, "❌ Chưa upload ảnh gốc"
-        return
-    if mask_image is None:
-        yield None, "❌ Chưa có mask — vẽ vùng trắng cần đổi thành nude trong tab Mask (hoặc upload ảnh mask trắng/đen)"
         return
     if not prompt.strip():
         prompt = "nude, naked, nsfw, bare breasts, bare pussy, fully nude, detailed skin, no clothes"
@@ -466,48 +547,18 @@ def tao_anh_inpaint(model, prompt, neg_them, input_image, mask_image, denoise, s
     sampler, scheduler = SAMPLER[sampler_ten]
     seed = random.randint(0, 2**48) if int(seed_nhap) < 0 else int(seed_nhap)
 
-    yield None, "⏳ Upload ảnh + mask..."
+    yield None, "⏳ Phân tích ảnh và mask..."
+    pil_in, pil_mask, msg = parse_input_image_and_mask(
+        input_image, mask_image,
+        detect_black=True, black_threshold=40,
+        mask_dilation=6, mask_blur=2
+    )
+
+    if pil_mask is None:
+        yield None, msg
+        return
+
     try:
-        from PIL import Image
-        # input
-        pil_in = input_image
-        if isinstance(pil_in, dict):
-            pil_in = Image.open(pil_in['name'])
-        if pil_in.mode != 'RGB':
-            pil_in = pil_in.convert('RGB')
-        # mask - gradio ImageMask có thể trả về dict với mask
-        pil_mask = None
-        if isinstance(mask_image, dict):
-            # gradio sketch returns {'image': ..., 'mask': ...}
-            if 'mask' in mask_image and mask_image['mask'] is not None:
-                pil_mask = mask_image['mask']
-                if isinstance(pil_mask, dict):
-                    pil_mask = Image.open(pil_mask['name'])
-            elif 'image' in mask_image:
-                pil_mask = mask_image['image']
-                if isinstance(pil_mask, dict):
-                    pil_mask = Image.open(pil_mask['name'])
-                else:
-                    pil_mask = pil_mask
-            else:
-                pil_mask = Image.open(mask_image['name']) if 'name' in mask_image else None
-        else:
-            pil_mask = mask_image
-
-        # Nếu mask là RGBA, lấy alpha hoặc chuyển sang L
-        if pil_mask is None:
-            raise RuntimeError("Không đọc được mask")
-
-        if hasattr(pil_mask, 'mode') and pil_mask.mode == 'RGBA':
-            # Lấy alpha làm mask
-            pil_mask = pil_mask.split()[-1]
-        if pil_mask.mode != 'RGB':
-            # Chuyển sang RGB để upload (ImageToMask sẽ lấy kênh red)
-            if pil_mask.mode == 'L':
-                pil_mask = pil_mask.convert('RGB')
-            else:
-                pil_mask = pil_mask.convert('RGB')
-
         fn_in = f"inpaint_in_{uuid.uuid4().hex[:8]}.png"
         fn_mask = f"inpaint_mask_{uuid.uuid4().hex[:8]}.png"
         server_in = upload_image_to_comfy(pil_in, fn_in)
@@ -519,72 +570,24 @@ def tao_anh_inpaint(model, prompt, neg_them, input_image, mask_image, denoise, s
     wf = build_workflow_inpaint(model, prompt_full, neg_full, int(steps), float(cfg), seed, sampler, scheduler, float(denoise), server_in, server_mask)
 
     yield None, f"⏳ Đã upload — đang inpaint denoise={denoise}..."
-    # chạy
-    ws = None
-    try:
-        import websocket
-        ws = websocket.create_connection(f"ws://127.0.0.1:8188/ws?clientId={CLIENT_ID}", timeout=5)
-        ws.settimeout(2)
-    except Exception:
-        ws = None
-
-    try:
-        res = http_json(f"{COMFY}/prompt", {"prompt": wf, "client_id": CLIENT_ID})
-        prompt_id = res["prompt_id"]
-    except Exception as e:
-        yield None, f"❌ Không gửi được: {e}"
+    result = yield from run_workflow_with_progress_gen(wf)
+    if result is None:
         return
-
-    bat_dau = time.time()
-    xong = False
-    while not xong and time.time() - bat_dau < 600:
-        if ws is not None:
-            try:
-                msg = ws.recv()
-                if isinstance(msg, str):
-                    m = json.loads(msg)
-                    if m.get("type") == "progress":
-                        d = m["data"]
-                        pct = int(d["value"] / max(d["max"], 1) * 100)
-                        thanh = "█" * (pct // 5) + "░" * (20 - pct // 5)
-                        yield None, f"🖌️ Inpaint  {thanh}  {d['value']}/{d['max']} ({pct}%)"
-                    elif (m.get("type") == "executing" and m["data"].get("node") is None and m["data"].get("prompt_id") == prompt_id):
-                        xong = True
-            except Exception:
-                pass
-        else:
-            time.sleep(1.5)
-        if not xong:
-            try:
-                hist = http_json(f"{COMFY}/history/{prompt_id}")
-                if prompt_id in hist:
-                    xong = True
-            except Exception:
-                pass
-
-    if ws is not None:
-        try:
-            ws.close()
-        except Exception:
-            pass
-
-    anh = None
-    for _ in range(10):
-        anh = tai_anh_ket_qua(prompt_id)
-        if anh is not None:
-            break
-        time.sleep(1)
-
+    anh, prompt_id, elapsed = result
     if anh is None:
         yield None, "❌ Hết giờ"
         return
+    giay = int(elapsed)
+    yield anh, f"✅ Inpaint xong sau {giay}s — Seed: {seed}\n{msg}"
 
-    giay = int(time.time() - bat_dau)
-    yield anh, f"✅ Inpaint xong sau {giay}s — Seed: {seed}"
+def update_inpaint_preset_vals(preset_name):
+    if preset_name in PRESET_INPAINT_FIX:
+        p = PRESET_INPAINT_FIX[preset_name]
+        return p["prompt"], p["denoise"]
+    return "", 0.85
 
 def main():
     import gradio as gr
-    import os
 
     models = lay_danh_sach_model()
     if not models:
@@ -594,7 +597,7 @@ def main():
     try:
         if os.path.isfile('/content/model_file.txt'):
             drive_model = open('/content/model_file.txt', encoding='utf-8', errors='ignore').read().strip()
-    except:
+    except Exception:
         pass
     mac_dinh = None
     if drive_model:
@@ -604,12 +607,19 @@ def main():
                         next((m for m in models if "wai" in m.lower()),
                              models[0] if models else None))
 
-    with gr.Blocks(title="Tạo ảnh & Sửa ảnh Nude - NoobAI", theme=gr.themes.Soft()) as demo:
-        md = "# 🎨 Tạo ảnh & Sửa ảnh Nude — NoobAI-XL 1.1 (V-Pred)\n**Model:** `noobai-XL-1.1.safetensors` — Euler + normal, CFG 4-5, Steps 28-35. Kéo workflow JSON trong repo nếu muốn dùng ComfyUI thuần."
+    custom_css = """
+    .gradio-container { max-width: 1200px !important; margin: 0 auto !important; }
+    .status-box textarea { font-family: monospace; }
+    """
+
+    with gr.Blocks(title="Tạo ảnh & Sửa Tay Chân Mặt Nude - NoobAI", theme=gr.themes.Soft(), css=custom_css) as demo:
+        md = "# 🎨 Giao Diện Tạo & Sửa Ảnh Anime Nude — NoobAI-XL 1.1 (V-Pred)\n"
+        md += "**Tối ưu 2026**: Hỗ trợ vẽ ảnh nude, sửa ảnh có sẵn, và **sửa tay/chân/mặt bị lỗi bằng cách tô đen hoặc vẽ mask**."
         if drive_model:
-            md += f"\n\n✅ **Model từ Drive của bạn:** `{drive_model}` — đã tự chọn."
+            md += f"\n\n📂 **Model Drive tự nhận diện:** `{drive_model}`"
         gr.Markdown(md)
 
+        # TAB 1
         with gr.Tab("1️⃣ Tạo ảnh nude từ text (Txt2Img)"):
             with gr.Row():
                 with gr.Column(scale=5):
@@ -626,11 +636,12 @@ def main():
                         neg_them = gr.Textbox(label="Loại trừ thêm (đã có sẵn censored, clothes...)", value="", lines=2)
                 with gr.Column(scale=5):
                     anh = gr.Image(label="🖼️ Kết quả", height=620, format="png", type="pil")
-                    trang_thai = gr.Textbox(label="Tiến trình", value="Sẵn sàng.", lines=3)
+                    trang_thai = gr.Textbox(label="Tiến trình", value="Sẵn sàng.", lines=3, elem_classes=["status-box"])
             nut_ve.click(tao_anh, inputs=[model, preset, prompt, neg_them, kich_thuoc, sampler, steps, cfg, seed], outputs=[anh, trang_thai])
 
+        # TAB 2
         with gr.Tab("2️⃣ Sửa ảnh có sẵn thành nude (Img2Img / Undress)"):
-            gr.Markdown("Upload ảnh mặc đồ → AI sẽ đổi thành nude. Denoise thấp giữ dáng, cao đổi nhiều.")
+            gr.Markdown("Upload ảnh mặc đồ → AI sẽ đổi thành nude toàn thân. Denoise thấp giữ dáng, cao đổi nhiều.")
             with gr.Row():
                 with gr.Column(scale=5):
                     input_img = gr.Image(label="📤 Ảnh gốc (mặc đồ)", type="pil", height=400)
@@ -646,16 +657,84 @@ def main():
                         neg2 = gr.Textbox(label="Negative thêm", value="", lines=2)
                 with gr.Column(scale=5):
                     anh2 = gr.Image(label="🖼️ Kết quả nude", height=620, format="png", type="pil")
-                    trang_thai2 = gr.Textbox(label="Tiến trình", value="Sẵn sàng.", lines=3)
+                    trang_thai2 = gr.Textbox(label="Tiến trình", value="Sẵn sàng.", lines=3, elem_classes=["status-box"])
             nut_ve2.click(tao_anh_img2img, inputs=[model2, prompt2, neg2, input_img, denoise, sampler2, steps2, cfg2, seed2], outputs=[anh2, trang_thai2])
 
-        with gr.Tab("3️⃣ Inpaint - Xóa áo/quần (chính xác)"):
-            gr.Markdown("Vẽ mask trắng lên vùng cần xóa (áo, quần) → chỉ vùng đó thành nude. Dùng brush vẽ trong ô Mask.")
+        # TAB 3 (MỚI: SỬA TAY / CHÂN / MẶT / VÙNG TÔ ĐEN CHUYÊN DỤNG)
+        with gr.Tab("✨ Sửa tay / chân / mặt (Khu vực tô đen)"):
+            gr.Markdown(
+                "### 🛠️ Chức năng sửa lỗi Anatomy bằng vùng tô đen\n"
+                "**Cách dùng tiện lợi:**\n"
+                "1. **Cách 1 (Tô đen sẵn):** Lấy app vẽ / Paint tô màu đen đặc `(RGB #000000)` đè lên bàn tay, bàn chân, khuôn mặt bị méo rồi upload vào đây.\n"
+                "2. **Cách 2 (Vẽ trực tiếp):** Upload ảnh và dùng công cụ cọ vẽ (brush) bôi trắng lên vùng cần vẽ lại.\n"
+                "3. Hệ thống sẽ **tự động bóc tách vùng tô đen**, mở rộng viền (dilation) và vẽ lại chi tiết cực nét bằng NoobAI."
+            )
+            with gr.Row():
+                with gr.Column(scale=5):
+                    input_fix_img = gr.ImageMask(
+                        label="📤 Upload ảnh đã tô đen HOẶC vẽ trực tiếp lên tay/chân/mặt",
+                        type="pil",
+                        height=420
+                    )
+                    preset_fix_radio = gr.Radio(
+                        list(PRESET_INPAINT_FIX.keys()),
+                        value="🖐️ Sửa tay (Fix Hands)",
+                        label="🎯 Mục tiêu cần sửa"
+                    )
+                    prompt_fix = gr.Textbox(
+                        label="Prompt chi tiết (được điền tự động theo mục tiêu)",
+                        value=PRESET_INPAINT_FIX["🖐️ Sửa tay (Fix Hands)"]["prompt"],
+                        lines=2
+                    )
+                    denoise_fix = gr.Slider(
+                        0.5, 1.0,
+                        value=PRESET_INPAINT_FIX["🖐️ Sửa tay (Fix Hands)"]["denoise"],
+                        step=0.05,
+                        label="Denoise (Tay/Chân nên 0.8–0.9, Mặt nên 0.7–0.8)"
+                    )
+                    nut_fix = gr.Button("✨ TIẾN HÀNH SỬA VÙNG TÔ ĐEN", variant="primary", size="lg")
+
+                    with gr.Accordion("⚙️ Tùy chỉnh nhận diện vùng đen & viền mask", open=False):
+                        detect_black_cb = gr.Checkbox(value=True, label="Tự động nhận diện pixel màu đen (Black detection)")
+                        black_thresh = gr.Slider(5, 80, value=35, step=1, label="Ngưỡng đen RGB (mặc định 35: nhận diện các màu đen < 35/255)")
+                        mask_dilation_sl = gr.Slider(0, 20, value=6, step=1, label="Mở rộng viền Mask (Dilation - giúp ghép mượt)")
+                        mask_blur_sl = gr.Slider(0, 10, value=2, step=1, label="Làm mờ biên Mask (Blur/Feather)")
+                        model_fix = gr.Dropdown(models, value=mac_dinh, label="Model")
+                        sampler_fix = gr.Radio(list(SAMPLER.keys()), value="euler + normal (NoobAI V-Pred — mặc định)", label="Sampler")
+                        steps_fix = gr.Slider(15, 50, value=32, step=1, label="Steps")
+                        cfg_fix = gr.Slider(1, 10, value=4.5, step=0.5, label="CFG")
+                        seed_fix = gr.Number(value=-1, precision=0, label="Seed (-1 = ngẫu nhiên)")
+                        neg_fix_custom = gr.Textbox(label="Negative loại trừ thêm", value="", lines=1)
+
+                with gr.Column(scale=5):
+                    anh_fix_ketqua = gr.Image(label="🖼️ Kết quả sau khi sửa", height=420, format="png", type="pil")
+                    with gr.Accordion("👁️ Xem vùng Mask hệ thống nhận diện", open=False):
+                        mask_preview = gr.Image(label="Vùng Mask được bóc tách (trắng là vùng sửa)", height=220, type="pil")
+                    trang_thai_fix = gr.Textbox(label="Tiến trình xử lý", value="Sẵn sàng.", lines=4, elem_classes=["status-box"])
+
+            preset_fix_radio.change(
+                update_inpaint_preset_vals,
+                inputs=[preset_fix_radio],
+                outputs=[prompt_fix, denoise_fix]
+            )
+
+            nut_fix.click(
+                tao_anh_inpaint_sua_chi_tiet,
+                inputs=[
+                    model_fix, preset_fix_radio, prompt_fix, neg_fix_custom, input_fix_img,
+                    denoise_fix, sampler_fix, steps_fix, cfg_fix, seed_fix,
+                    detect_black_cb, black_thresh, mask_dilation_sl, mask_blur_sl
+                ],
+                outputs=[anh_fix_ketqua, mask_preview, trang_thai_fix]
+            )
+
+        # TAB 4: Inpaint xóa quần áo (tổng quát)
+        with gr.Tab("4️⃣ Inpaint - Xóa áo/quần (cũ)"):
+            gr.Markdown("Vẽ mask hoặc tô đen lên vùng cần xóa áo/quần để chuyển thành da nude.")
             with gr.Row():
                 with gr.Column(scale=5):
                     input_img3 = gr.Image(label="📤 Ảnh gốc", type="pil", height=350)
-                    # Gradio ImageMask: cho phép vẽ mask
-                    mask_img = gr.ImageMask(label="🎨 Vẽ mask trắng lên vùng cần đổi thành nude (áo/quần)", type="pil", height=350)
+                    mask_img = gr.ImageMask(label="🎨 Vẽ mask hoặc upload ảnh mask", type="pil", height=350)
                     prompt3 = gr.Textbox(label="Prompt vùng inpaint", value="nude, bare breasts, bare pussy, fully nude, detailed skin, no clothes", lines=2)
                     denoise3 = gr.Slider(0.5, 1.0, value=0.95, step=0.05, label="Denoise (inpaint nên 0.9-1.0)")
                     nut_ve3 = gr.Button("✂️ INPAINT NUDE", variant="primary", size="lg")
@@ -668,9 +747,10 @@ def main():
                         neg3 = gr.Textbox(label="Negative thêm", value="", lines=2)
                 with gr.Column(scale=5):
                     anh3 = gr.Image(label="🖼️ Kết quả inpaint", height=620, format="png", type="pil")
-                    trang_thai3 = gr.Textbox(label="Tiến trình", value="Sẵn sàng.", lines=3)
+                    trang_thai3 = gr.Textbox(label="Tiến trình", value="Sẵn sàng.", lines=3, elem_classes=["status-box"])
             nut_ve3.click(tao_anh_inpaint, inputs=[model3, prompt3, neg3, input_img3, mask_img, denoise3, sampler3, steps3, cfg3, seed3], outputs=[anh3, trang_thai3])
 
+        # TAB 5: Workflow
         with gr.Tab("📂 Workflow JSON"):
             gr.Markdown("Kéo các file JSON này vào ComfyUI để dùng workflow thuần (không cần Gradio):\n- `workflow_noobai_nude_txt2img.json`: tạo nude từ text\n- `workflow_noobai_nude_img2img.json`: sửa ảnh mặc đồ thành nude\n- `workflow_noobai_nude_inpaint.json`: inpaint xóa áo/quần\n- `workflow_noobai_nude_facedetail.json`: tự làm đẹp mặt sau khi nude\n\nFile đã có sẵn trong repo, tải về từ tab Files bên trái.")
 
