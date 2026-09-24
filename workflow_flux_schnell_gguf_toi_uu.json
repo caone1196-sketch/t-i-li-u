@@ -103,7 +103,7 @@
   "32": {
     "class_type": "UltralyticsDetectorProvider",
     "inputs": {
-      "model_name": "bbox/foot_yolov8m.pt"
+      "model_name": "bbox/foot_anime_yolo11m_v3.pt"
     }
   },
   "33": {

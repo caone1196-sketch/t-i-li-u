@@ -10,7 +10,7 @@
 | `ae.safetensors` (FLUX VAE) | 320 MB | `AI_Models/vae/` → `models/vae/` |
 | `face_yolov8m.pt` (YOLO mặt) | 52 MB | `ultralytics/bbox/` |
 | `hand_yolov8s.pt` (YOLO tay) | 22 MB | `ultralytics/bbox/` |
-| `foot_yolov8m.pt` (YOLO chân) | 52 MB | `ultralytics/bbox/` |
+| `foot_anime_yolo11m_v3.pt` (YOLO chân anime) | ~40 MB | `ultralytics/bbox/` |
 | `sam_vit_b_01ec64.pth` (SAM mặt) | 375 MB | `sams/` |
 | **TỔNG MODEL** | **~12.3 GB** | **Dưới 15GB ✅** |
 
