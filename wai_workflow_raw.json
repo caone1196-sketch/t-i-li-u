@@ -1,0 +1,8 @@
+{
+  "last_node_id": 52,
+  "last_link_id": 81,
+  "nodes": [
+    {"id":10,"type":"Note","pos":[1220,260],"size":[260,120],"flags":{},"order":24,"mode":0,"properties":{"text":""},"widgets_values":["📋 QUY TRÌNH 3 BƯỚC TỐI ƯU TAY/CHÂN/MẮT\n\n① NHÁP 832×1216 d=1.00 euler_a CFG5 28 steps (prompt chính)\n② SỬA LỖI TAY/CHÂN/MẮT ×1.5 bicubic + KSampler d=0.30 dpmpp_2m karras 20 steps CFG5 (prompt chính + 🖐️ + 👁️, denoise thấp tránh mọc ngón)\n③ SIÊU NÉT d=0.35 CFG5.5 20 steps dpmpp_2m karras (làm nét sau sửa lỗi)\n④⑤⑥ CẮT-VẼ: mặt bbox guide768 d0.30, tay guide768 d0.32 SAM, chân guide768 d0.50 cycle2\n\nNếu ② mọc ngón: hạ d 0.30→0.25. Nếu ② vẫn lỗi tay: tăng hand threshold 0.4→0.5\nNếu ③ nhòe: tăng d 0.35→0.40. Nếu ③ mọc ngón: hạ 0.35→0.30"],"color":"#432","bgcolor":"#653"},
+    {"id":11,"type":"Note","pos":[1220,580],"size":[260,120],"flags":{},"order":25,"mode":0,"properties":{"text":""},"widgets_values":["⚙️ YOLO/SAM\n\nface_yolov8m.pt + hand_yolov8s.pt + foot_anime_yolo11m_v3.pt\nsam_vit_b_01ec64.pth\n\nMặt đen: tăng feather 20→24, denoise 0.25\nCắt lệch: bbox_dilation 12→16, crop_factor 2.5→3.0"],"color":"#223","bgcolor":"#335"}
+  ]
+}

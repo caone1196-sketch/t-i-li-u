@@ -1,0 +1,487 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "WAI-illustrious.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "FreeU_V2",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "b1": 1.1,
+      "b2": 1.2,
+      "s1": 0.0,
+      "s2": 0.0
+    }
+  },
+  "3": {
+    "class_type": "RescaleCFG",
+    "inputs": {
+      "model": [
+        "2",
+        0
+      ],
+      "multiplier": 0.75
+    }
+  },
+  "10": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "1girl, solo, long hair, school uniform, cherry blossoms, full body, standing, straight on, arms at sides, hands visible, loafers, white socks, looking at viewer, smile, masterpiece, best quality, newest, absurdres, highres, very aesthetic",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "11": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "(extra fingers:1.4), (extra toes:1.3), (mutated hands:1.3), fused fingers, missing fingers, extra digits, fewer digits, too many fingers, extra limbs, extra arms, bad feet, fused toes, missing toes, bad eyes, bad anatomy, blurry, worst quality, lowres, low quality, censored, mosaic censoring, blur censor, bar censor, signature, username, logo, watermark, jpeg artifacts, furry, anthro, bad-artist, negative_hand-1.5",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "12": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "detailed hands, (five fingers:1.3), beautiful hands, slender fingers, nail polish, (pink nails:1.35), glossy fingernails, manicure, detailed fingernails, natural knuckles, soft skin, same pose, same size, sharp focus, ultra detailed",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "13": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "detailed eyes, (beautiful eyes:1.35), sparkling eyes, glossy eyes, catchlight, light in eyes, detailed pupils, detailed iris, gradient eyes, long eyelashes, thick eyelashes, natural makeup, same composition, same size, sharp focus, ultra detailed",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "14": {
+    "class_type": "ConditioningSetTimestepRange",
+    "inputs": {
+      "conditioning": [
+        "12",
+        0
+      ],
+      "start": 0.5,
+      "end": 1.0
+    }
+  },
+  "15": {
+    "class_type": "ConditioningSetTimestepRange",
+    "inputs": {
+      "conditioning": [
+        "13",
+        0
+      ],
+      "start": 0.6,
+      "end": 1.0
+    }
+  },
+  "16": {
+    "class_type": "ConditioningCombine",
+    "inputs": {
+      "conditioning_1": [
+        "10",
+        0
+      ],
+      "conditioning_2": [
+        "14",
+        0
+      ]
+    }
+  },
+  "17": {
+    "class_type": "ConditioningCombine",
+    "inputs": {
+      "conditioning_1": [
+        "16",
+        0
+      ],
+      "conditioning_2": [
+        "15",
+        0
+      ]
+    }
+  },
+  "20": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 832,
+      "height": 1216,
+      "batch_size": 1
+    }
+  },
+  "21": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 156680208700286,
+      "control_after_generate": "fixed",
+      "steps": 28,
+      "cfg": 5.0,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "karras",
+      "denoise": 1.0,
+      "model": [
+        "3",
+        0
+      ],
+      "positive": [
+        "17",
+        0
+      ],
+      "negative": [
+        "11",
+        0
+      ],
+      "latent_image": [
+        "20",
+        0
+      ]
+    }
+  },
+  "22": {
+    "class_type": "LatentUpscale",
+    "inputs": {
+      "samples": [
+        "21",
+        0
+      ],
+      "upscale_method": "bicubic",
+      "width": 1248,
+      "height": 1824,
+      "crop": "disabled"
+    }
+  },
+  "23": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 156680208700286,
+      "control_after_generate": "fixed",
+      "steps": 18,
+      "cfg": 5.0,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "sgm_uniform",
+      "denoise": 0.28,
+      "model": [
+        "3",
+        0
+      ],
+      "positive": [
+        "17",
+        0
+      ],
+      "negative": [
+        "11",
+        0
+      ],
+      "latent_image": [
+        "22",
+        0
+      ]
+    }
+  },
+  "24": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 156680208700286,
+      "control_after_generate": "fixed",
+      "steps": 20,
+      "cfg": 5.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "sgm_uniform",
+      "denoise": 0.32,
+      "model": [
+        "3",
+        0
+      ],
+      "positive": [
+        "17",
+        0
+      ],
+      "negative": [
+        "11",
+        0
+      ],
+      "latent_image": [
+        "23",
+        0
+      ]
+    }
+  },
+  "25": {
+    "class_type": "VAEDecodeTiled",
+    "inputs": {
+      "samples": [
+        "24",
+        0
+      ],
+      "vae": [
+        "1",
+        2
+      ],
+      "tile_size": 512
+    }
+  },
+  "30": {
+    "class_type": "UltralyticsDetectorProvider",
+    "inputs": {
+      "model_name": "bbox/face_yolov8m.pt"
+    }
+  },
+  "31": {
+    "class_type": "UltralyticsDetectorProvider",
+    "inputs": {
+      "model_name": "bbox/hand_yolov8s.pt"
+    }
+  },
+  "32": {
+    "class_type": "UltralyticsDetectorProvider",
+    "inputs": {
+      "model_name": "bbox/foot_anime_yolo11m_v3.pt"
+    }
+  },
+  "33": {
+    "class_type": "SAMLoader",
+    "inputs": {
+      "model_name": "sam_vit_b_01ec64.pth",
+      "device_mode": "AUTO"
+    }
+  },
+  "34": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "detailed face, natural skin, beautiful face, sharp focus, same composition, same size",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "35": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "deformed face, bad face, blurry face, asymmetrical face, low quality",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "40": {
+    "class_type": "FaceDetailer",
+    "inputs": {
+      "image": [
+        "25",
+        0
+      ],
+      "model": [
+        "3",
+        0
+      ],
+      "clip": [
+        "1",
+        1
+      ],
+      "vae": [
+        "1",
+        2
+      ],
+      "positive": [
+        "34",
+        0
+      ],
+      "negative": [
+        "35",
+        0
+      ],
+      "bbox_detector": [
+        "30",
+        0
+      ],
+      "guide_size": 768,
+      "guide_size_for": true,
+      "max_size": 1536,
+      "seed": 156680208700286,
+      "control_after_generate": "fixed",
+      "steps": 18,
+      "cfg": 5.0,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "normal",
+      "denoise": 0.28,
+      "feather": 20,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "bbox_threshold": 0.5,
+      "bbox_dilation": 8,
+      "bbox_crop_factor": 3.0,
+      "sam_detection_hint": "center-1",
+      "sam_threshold": 0.93,
+      "sam_dilation": 0,
+      "sam_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "False",
+      "drop_size": 10,
+      "wildcard": "detailed eyes, (beautiful eyes:1.35), sparkling eyes, glossy eyes, catchlight, light in eyes, detailed pupils, long eyelashes, thick eyelashes, natural makeup",
+      "cycle": 1,
+      "inpaint_model": false,
+      "noise_mask_feather": 20,
+      "tiled_encode": false,
+      "tiled_decode": false
+    }
+  },
+  "41": {
+    "class_type": "FaceDetailer",
+    "inputs": {
+      "image": [
+        "40",
+        0
+      ],
+      "model": [
+        "3",
+        0
+      ],
+      "clip": [
+        "1",
+        1
+      ],
+      "vae": [
+        "1",
+        2
+      ],
+      "positive": [
+        "34",
+        0
+      ],
+      "negative": [
+        "35",
+        0
+      ],
+      "bbox_detector": [
+        "31",
+        0
+      ],
+      "sam_model_opt": [
+        "33",
+        0
+      ],
+      "guide_size": 768,
+      "guide_size_for": true,
+      "max_size": 1536,
+      "seed": 156680208700286,
+      "control_after_generate": "fixed",
+      "steps": 20,
+      "cfg": 5.0,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "normal",
+      "denoise": 0.3,
+      "feather": 14,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "bbox_threshold": 0.45,
+      "bbox_dilation": 8,
+      "bbox_crop_factor": 2.8,
+      "sam_detection_hint": "rect-4",
+      "sam_threshold": 0.93,
+      "sam_dilation": 0,
+      "sam_bbox_expansion": 4,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "Outter",
+      "drop_size": 8,
+      "wildcard": "detailed hands, (five fingers:1.3), beautiful hands, slender fingers, nail polish, (pink nails:1.35), glossy fingernails, manicure, detailed fingernails, natural knuckles, soft skin, same pose, same size, sharp focus, ultra detailed",
+      "cycle": 1,
+      "inpaint_model": false,
+      "noise_mask_feather": 20,
+      "tiled_encode": false,
+      "tiled_decode": false
+    }
+  },
+  "42": {
+    "class_type": "FaceDetailer",
+    "inputs": {
+      "image": [
+        "41",
+        0
+      ],
+      "model": [
+        "3",
+        0
+      ],
+      "clip": [
+        "1",
+        1
+      ],
+      "vae": [
+        "1",
+        2
+      ],
+      "positive": [
+        "34",
+        0
+      ],
+      "negative": [
+        "35",
+        0
+      ],
+      "bbox_detector": [
+        "32",
+        0
+      ],
+      "sam_model_opt": [
+        "33",
+        0
+      ],
+      "guide_size": 768,
+      "guide_size_for": true,
+      "max_size": 1536,
+      "seed": 156680208700286,
+      "control_after_generate": "fixed",
+      "steps": 18,
+      "cfg": 5.0,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "normal",
+      "denoise": 0.4,
+      "feather": 16,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "bbox_threshold": 0.45,
+      "bbox_dilation": 10,
+      "bbox_crop_factor": 3.2,
+      "sam_detection_hint": "center-1",
+      "sam_threshold": 0.93,
+      "sam_dilation": 0,
+      "sam_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "Outter",
+      "drop_size": 8,
+      "wildcard": "detailed feet, (five toes:1.25), beautiful feet, slender feet, well-defined toes, detailed toes, arched feet, natural skin, soft skin, toenail polish, (pink toenails:1.3), glossy toenails, shiny toenails, detailed toenails, loafers, white socks, ankle, same size, same pose, ultra detailed, sharp focus",
+      "cycle": 1,
+      "inpaint_model": false,
+      "noise_mask_feather": 20,
+      "tiled_encode": false,
+      "tiled_decode": false
+    }
+  },
+  "50": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "WAI_ToiUu_3pass",
+      "images": [
+        "42",
+        0
+      ]
+    }
+  }
+}
