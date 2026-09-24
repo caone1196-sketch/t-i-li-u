@@ -1,0 +1,336 @@
+{
+  "1": {
+    "class_type": "UnetLoaderGGUF",
+    "inputs": {
+      "unet_name": "flux1-schnell-Q5_K_S.gguf"
+    }
+  },
+  "2": {
+    "class_type": "DualCLIPLoaderGGUF",
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "t5-v1_1-xxl-encoder-Q4_K_M.gguf",
+      "type": "flux"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    }
+  },
+  "10": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "masterpiece, best quality, very aesthetic, absurdres, highres, 1girl, solo, long hair, school uniform, cherry blossoms, full body, standing, arms at sides, hands visible, loafers, white socks, looking at viewer, smile, detailed face, detailed eyes, detailed hands, five fingers, detailed feet",
+      "clip": [
+        "2",
+        0
+      ]
+    }
+  },
+  "11": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": [
+        "2",
+        0
+      ]
+    }
+  },
+  "20": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    }
+  },
+  "21": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "control_after_generate": "randomize",
+      "steps": 4,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "model": [
+        "1",
+        0
+      ],
+      "positive": [
+        "10",
+        0
+      ],
+      "negative": [
+        "11",
+        0
+      ],
+      "latent_image": [
+        "20",
+        0
+      ]
+    }
+  },
+  "22": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "21",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "30": {
+    "class_type": "UltralyticsDetectorProvider",
+    "inputs": {
+      "model_name": "bbox/face_yolov8m.pt"
+    }
+  },
+  "31": {
+    "class_type": "UltralyticsDetectorProvider",
+    "inputs": {
+      "model_name": "bbox/hand_yolov8s.pt"
+    }
+  },
+  "32": {
+    "class_type": "UltralyticsDetectorProvider",
+    "inputs": {
+      "model_name": "bbox/foot_yolov8m.pt"
+    }
+  },
+  "33": {
+    "class_type": "SAMLoader",
+    "inputs": {
+      "model_name": "sam_vit_b_01ec64.pth",
+      "device_mode": "AUTO"
+    }
+  },
+  "34": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "masterpiece, best quality, ultra detailed, sharp focus, same composition, same person",
+      "clip": [
+        "2",
+        0
+      ]
+    }
+  },
+  "35": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": [
+        "2",
+        0
+      ]
+    }
+  },
+  "40": {
+    "class_type": "FaceDetailer",
+    "inputs": {
+      "image": [
+        "22",
+        0
+      ],
+      "bbox_detector": [
+        "30",
+        0
+      ],
+      "denoise": 0.18,
+      "bbox_threshold": 0.5,
+      "bbox_dilation": 6,
+      "bbox_crop_factor": 3.0,
+      "wildcard": "beautiful eyes, detailed eyes, natural skin, detailed face",
+      "model": [
+        "1",
+        0
+      ],
+      "clip": [
+        "2",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "positive": [
+        "34",
+        0
+      ],
+      "negative": [
+        "35",
+        0
+      ],
+      "guide_size": 512,
+      "guide_size_for": true,
+      "max_size": 1024,
+      "seed": 0,
+      "control_after_generate": "randomize",
+      "steps": 6,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "feather": 24,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "sam_detection_hint": "center-1",
+      "sam_threshold": 0.93,
+      "sam_dilation": 0,
+      "sam_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "Outter",
+      "drop_size": 10,
+      "cycle": 1,
+      "inpaint_model": false,
+      "noise_mask_feather": 24,
+      "tiled_encode": true,
+      "tiled_decode": true,
+      "sam_model_opt": [
+        "33",
+        0
+      ]
+    }
+  },
+  "41": {
+    "class_type": "FaceDetailer",
+    "inputs": {
+      "image": [
+        "40",
+        0
+      ],
+      "bbox_detector": [
+        "31",
+        0
+      ],
+      "denoise": 0.25,
+      "bbox_threshold": 0.5,
+      "bbox_dilation": 8,
+      "bbox_crop_factor": 2.8,
+      "wildcard": "five fingers, perfect fingers, slender fingers, detailed fingernails, natural knuckles",
+      "model": [
+        "1",
+        0
+      ],
+      "clip": [
+        "2",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "positive": [
+        "34",
+        0
+      ],
+      "negative": [
+        "35",
+        0
+      ],
+      "guide_size": 512,
+      "guide_size_for": true,
+      "max_size": 1024,
+      "seed": 0,
+      "control_after_generate": "randomize",
+      "steps": 6,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "feather": 24,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "sam_detection_hint": "center-1",
+      "sam_threshold": 0.93,
+      "sam_dilation": 0,
+      "sam_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "Outter",
+      "drop_size": 10,
+      "cycle": 1,
+      "inpaint_model": false,
+      "noise_mask_feather": 24,
+      "tiled_encode": true,
+      "tiled_decode": true
+    }
+  },
+  "42": {
+    "class_type": "FaceDetailer",
+    "inputs": {
+      "image": [
+        "41",
+        0
+      ],
+      "bbox_detector": [
+        "32",
+        0
+      ],
+      "denoise": 0.3,
+      "bbox_threshold": 0.45,
+      "bbox_dilation": 10,
+      "bbox_crop_factor": 3.0,
+      "wildcard": "five toes, slender feet, detailed toes, natural toenails, ankle, soft skin",
+      "model": [
+        "1",
+        0
+      ],
+      "clip": [
+        "2",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "positive": [
+        "34",
+        0
+      ],
+      "negative": [
+        "35",
+        0
+      ],
+      "guide_size": 512,
+      "guide_size_for": true,
+      "max_size": 1024,
+      "seed": 0,
+      "control_after_generate": "randomize",
+      "steps": 6,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "feather": 24,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "sam_detection_hint": "center-1",
+      "sam_threshold": 0.93,
+      "sam_dilation": 0,
+      "sam_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "Outter",
+      "drop_size": 10,
+      "cycle": 1,
+      "inpaint_model": false,
+      "noise_mask_feather": 24,
+      "tiled_encode": true,
+      "tiled_decode": true
+    }
+  },
+  "50": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "FLUX_Q5_schnell",
+      "images": [
+        "42",
+        0
+      ]
+    }
+  }
+}

@@ -1,0 +1,384 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "🔵 Model NoobAI XL V-Pred 1.1"
+    },
+    "inputs": {
+      "ckpt_name": "noobai-XL-1.1.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "✍️ Prompt thuận"
+    },
+    "inputs": {
+      "text": "masterpiece, best quality, newest, absurdres, very aesthetic, 1girl, solo, beautiful detailed face, detailed eyes, long hair, large breasts, nude, naked, nsfw, detailed skin, sitting, bedroom, soft lighting, volumetric lighting, depth of field",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "3": {
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "🚫 Prompt nghịch"
+    },
+    "inputs": {
+      "text": "worst quality, low quality, lowres, blurry, bad anatomy, bad hands, mutated hands, extra digits, fewer digits, bad feet, deformed, malformed limbs, missing arms, missing legs, extra arms, extra legs, censored, mosaic censoring, bar censor, signature, username, logo, watermark",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "4": {
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "📐 Khung ảnh 832x1216"
+    },
+    "inputs": {
+      "width": 832,
+      "height": 1216,
+      "batch_size": 1
+    }
+  },
+  "5": {
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "🎲 KSampler chính euler/normal"
+    },
+    "inputs": {
+      "seed": 0,
+      "control_after_generate": true,
+      "steps": 30,
+      "cfg": 4.5,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1.0,
+      "model": [
+        "1",
+        0
+      ],
+      "positive": [
+        "2",
+        0
+      ],
+      "negative": [
+        "3",
+        0
+      ],
+      "latent_image": [
+        "4",
+        0
+      ]
+    }
+  },
+  "6": {
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "🎞 VAEDecode"
+    },
+    "inputs": {
+      "samples": [
+        "5",
+        0
+      ],
+      "vae": [
+        "1",
+        2
+      ]
+    }
+  },
+  "10": {
+    "class_type": "UltralyticsDetectorProvider",
+    "_meta": {
+      "title": "🔎 YOLO MẶT face_yolov8m"
+    },
+    "inputs": {
+      "model_name": "bbox/face_yolov8m.pt"
+    }
+  },
+  "11": {
+    "class_type": "UltralyticsDetectorProvider",
+    "_meta": {
+      "title": "🔎 YOLO TAY hand_yolov8s"
+    },
+    "inputs": {
+      "model_name": "bbox/hand_yolov8s.pt"
+    }
+  },
+  "12": {
+    "class_type": "UltralyticsDetectorProvider",
+    "_meta": {
+      "title": "🔎 YOLO CHÂN foot_anime_yolo11m_v3"
+    },
+    "inputs": {
+      "model_name": "bbox/foot_anime_yolo11m_v3.pt"
+    }
+  },
+  "13": {
+    "class_type": "SAMLoader",
+    "_meta": {
+      "title": "✂️ SAM sam_vit_h (chỉ dùng cho MẶT)"
+    },
+    "inputs": {
+      "model_name": "sam_vit_h_4b8939.pth",
+      "device_mode": "AUTO"
+    }
+  },
+  "14": {
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "✍️ Detailer MẶT"
+    },
+    "inputs": {
+      "text": "masterpiece, best quality, very aesthetic, detailed face, beautiful eyes, detailed skin, natural skin texture, smooth face",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "15": {
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "🚫 Negative chung"
+    },
+    "inputs": {
+      "text": "worst quality, low quality, blurry, deformed, mutated, bad anatomy, collage, composed of multiple parts, out of frame",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "16": {
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "✍️ Detailer TAY"
+    },
+    "inputs": {
+      "text": "masterpiece, best quality, perfect anatomy, natural human hand, five fingers, knuckles, smooth skin, natural fingernails",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "17": {
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "✍️ Detailer CHÂN"
+    },
+    "inputs": {
+      "text": "masterpiece, best quality, perfect anatomy, natural human foot, five toes, natural toenails, ankle, smooth foot skin",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "20": {
+    "class_type": "FaceDetailer",
+    "_meta": {
+      "title": "✨ SỬA MẶT (dùng SAM)"
+    },
+    "inputs": {
+      "image": [
+        "6",
+        0
+      ],
+      "model": [
+        "1",
+        0
+      ],
+      "clip": [
+        "1",
+        1
+      ],
+      "vae": [
+        "1",
+        2
+      ],
+      "positive": [
+        "14",
+        0
+      ],
+      "negative": [
+        "15",
+        0
+      ],
+      "bbox_detector": [
+        "10",
+        0
+      ],
+      "sam_model_opt": [
+        "13",
+        0
+      ],
+      "seed": 0,
+      "control_after_generate": true,
+      "steps": 20,
+      "cfg": 4.0,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 0.32,
+      "feather": 8,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "bbox_threshold": 0.55,
+      "bbox_dilation": 4,
+      "bbox_crop_factor": 3.0,
+      "sam_detection_hint": "center-1",
+      "sam_dilation_threshold": 0.93,
+      "sam_dilation": 0,
+      "sam_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "Outter",
+      "drop_size": 20,
+      "cycle": 1
+    }
+  },
+  "30": {
+    "class_type": "FaceDetailer",
+    "_meta": {
+      "title": "🤚 SỬA TAY (KHÔNG SAM, mask phẳng+feather)"
+    },
+    "inputs": {
+      "image": [
+        "20",
+        0
+      ],
+      "model": [
+        "1",
+        0
+      ],
+      "clip": [
+        "1",
+        1
+      ],
+      "vae": [
+        "1",
+        2
+      ],
+      "positive": [
+        "16",
+        0
+      ],
+      "negative": [
+        "15",
+        0
+      ],
+      "bbox_detector": [
+        "11",
+        0
+      ],
+      "seed": 0,
+      "control_after_generate": true,
+      "steps": 18,
+      "cfg": 4.0,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 0.32,
+      "feather": 20,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "bbox_threshold": 0.55,
+      "bbox_dilation": 12,
+      "bbox_crop_factor": 3.0,
+      "sam_detection_hint": "center-1",
+      "sam_dilation_threshold": 0.93,
+      "sam_dilation": 0,
+      "sam_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "Outter",
+      "drop_size": 30,
+      "cycle": 1
+    }
+  },
+  "40": {
+    "class_type": "FaceDetailer",
+    "_meta": {
+      "title": "🦶 SỬA CHÂN (KHÔNG SAM, mask phẳng+feather)"
+    },
+    "inputs": {
+      "image": [
+        "30",
+        0
+      ],
+      "model": [
+        "1",
+        0
+      ],
+      "clip": [
+        "1",
+        1
+      ],
+      "vae": [
+        "1",
+        2
+      ],
+      "positive": [
+        "17",
+        0
+      ],
+      "negative": [
+        "15",
+        0
+      ],
+      "bbox_detector": [
+        "12",
+        0
+      ],
+      "seed": 0,
+      "control_after_generate": true,
+      "steps": 18,
+      "cfg": 4.0,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 0.35,
+      "feather": 20,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "bbox_threshold": 0.5,
+      "bbox_dilation": 12,
+      "bbox_crop_factor": 3.0,
+      "sam_detection_hint": "center-1",
+      "sam_dilation_threshold": 0.93,
+      "sam_dilation": 0,
+      "sam_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "Outter",
+      "drop_size": 30,
+      "cycle": 1
+    }
+  },
+  "50": {
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "💾 Lưu ảnh"
+    },
+    "inputs": {
+      "filename_prefix": "NoobAI",
+      "images": [
+        "40",
+        0
+      ]
+    }
+  },
+  "51": {
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "🖼 Xem ảnh"
+    },
+    "inputs": {
+      "images": [
+        "40",
+        0
+      ]
+    }
+  }
+}
